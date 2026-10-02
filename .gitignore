@@ -1,1 +1,3 @@
 *.class
+mud*.log
+resources/fakedb/
