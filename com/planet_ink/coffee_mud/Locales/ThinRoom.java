@@ -9,6 +9,7 @@ import com.planet_ink.coffee_mud.Abilities.interfaces.*;
 import com.planet_ink.coffee_mud.Areas.interfaces.*;
 import com.planet_ink.coffee_mud.Behaviors.interfaces.*;
 import com.planet_ink.coffee_mud.CharClasses.interfaces.*;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Commands.interfaces.*;
 import com.planet_ink.coffee_mud.Common.interfaces.*;
 import com.planet_ink.coffee_mud.Exits.interfaces.*;
@@ -37,6 +38,20 @@ import java.util.*;
 */
 public class ThinRoom implements Room
 {
+	protected EncounterManager encounterManager = null;
+
+	public ThinRoom()
+	{
+		super();
+		encounterManager = new EncounterManager(this);
+	}
+
+	@Override
+	public EncounterManager getEncounterManager()
+	{
+		return encounterManager;
+	}
+
 	@Override
 	public String ID()
 	{
