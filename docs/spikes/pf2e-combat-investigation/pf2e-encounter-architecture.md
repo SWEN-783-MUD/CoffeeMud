@@ -89,5 +89,16 @@ The manager should be a coordinator, not the place where attack rolls, damage fo
 
 ## Responsibilities of Encounter
 
-TODO
+An Encounter should be the authority for combat state and timing.
 
+It should manage:
+
+- Participants.
+- Party members.
+- Initiative order.
+- Round number.
+- Current turn.
+- Action resources.
+- Reaction availability.
+- Waiting for player input.
+- End conditions.
