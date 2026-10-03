@@ -15,6 +15,7 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.*;
 import com.planet_ink.coffee_mud.Locales.interfaces.*;
 import com.planet_ink.coffee_mud.MOBS.interfaces.*;
 import com.planet_ink.coffee_mud.Races.interfaces.*;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 
 import java.util.*;
 
@@ -45,6 +46,7 @@ import java.util.*;
  */
 public interface Room extends PhysicalAgent, ItemPossessor, Places, MOBPossessor
 {
+	EncounterManager getEncounterManager();
 	/**
 	 * The room ID is the "address" of the room on the world map.  It
 	 * is generally of the format [AREA NAME]#[ID NUMBER] for primary
