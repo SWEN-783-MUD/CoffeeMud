@@ -12,6 +12,7 @@ import com.planet_ink.coffee_mud.Abilities.interfaces.*;
 import com.planet_ink.coffee_mud.Areas.interfaces.*;
 import com.planet_ink.coffee_mud.Behaviors.interfaces.*;
 import com.planet_ink.coffee_mud.CharClasses.interfaces.*;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Commands.interfaces.*;
 import com.planet_ink.coffee_mud.Common.interfaces.*;
 import com.planet_ink.coffee_mud.Exits.interfaces.*;
@@ -79,6 +80,8 @@ public class StdRoom implements Room
 	protected STreeSet<String>			tags				= null;
 	protected Room						me					= this;
 
+	protected EncounterManager			encounterManager    = null;
+
 	@SuppressWarnings("rawtypes")
 	protected ApplyAffectPhyStats affectPhyStats 	= new ApplyAffectPhyStats<Physical>(this);
 	// base move points and thirst points per round
@@ -91,6 +94,13 @@ public class StdRoom implements Room
 		setMovementCost(2); // movement consumption
 		setRoomSize(((domainType()&Room.INDOORS)>0)?1:10);
 		recoverPhyStats();
+
+		encounterManager = new EncounterManager(this);
+	}
+
+	@Override
+	public EncounterManager getEncounterManager() {
+		return encounterManager;
 	}
 
 	/*
