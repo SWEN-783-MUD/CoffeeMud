@@ -5,10 +5,17 @@ import java.util.Collection;
 import java.util.List;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
+import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 
 public class EncounterManager
 {
 	private final List<Encounter> encounters = new ArrayList<Encounter>();
+	private final Room room;
+
+	public EncounterManager(final Room room)
+	{
+		this.room = room;
+	}
 
 	public List<Encounter> getEncounters()
 	{
