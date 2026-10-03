@@ -12,4 +12,9 @@ public class Encounter
 	{
 		this.mobs = mobs;
 	}
+
+	public Collection<MOB> getMobs()
+	{
+		return mobs;
+	}
 }
