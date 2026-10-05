@@ -6,6 +6,7 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.EncounterLibrary;
 /**
  * The CMEncounters class is a library that provides access to the EncounterDirectory,
  * which manages encounters in the game. It implements the EncounterLibrary interface.
+ * 
  */
 public class CMEncounters extends StdLibrary implements EncounterLibrary {
     

@@ -149,7 +149,8 @@ public class CMLib
 		ABLECOMP(AbilityComponents.class),
 		GALACTIC(GalacticMap.class),
 		CITY(CityMap.class),
-		WORLDHUNT(WorldHuntLibrary.class)
+		WORLDHUNT(WorldHuntLibrary.class),
+		ENCOUNTERS(EncounterLibrary.class)
 		;
 
 		public final Class<?> ancestor;
@@ -460,6 +461,16 @@ public class CMLib
 	public static final CombatLibrary combat()
 	{
 		return (CombatLibrary)l().libraries[Library.COMBAT.ordinal()];
+	}
+	
+	/**
+     * Returns a reference to this threads encounter library.
+     * @see com.planet_ink.coffee_mud.Libraries.interfaces.EncounterLibrary
+     * @return a reference to this threads encounter library.
+     */
+	public static final EncounterLibrary encounters() 
+	{
+	    return (EncounterLibrary)l().libraries[Library.ENCOUNTERS.ordinal()];
 	}
 
 	/**
