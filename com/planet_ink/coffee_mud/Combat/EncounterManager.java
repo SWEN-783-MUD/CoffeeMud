@@ -66,12 +66,14 @@ public class EncounterManager
         {
             return false;
         }
+        // Clear the legacy combat state for all MOBs in the encounter before finishing the ending process
+        clearLegacyCombatState(encounter);
         // Call the finishEnding() method on the encounter to complete the ending process
         if (!encounter.finishEnding())
         {
             return false;
         }
-        // Cleanup: Unregister the encounter from the EncounterDirectory and remove it from the encounters list
+        
         directory.unregisterEncounter(encounter);
         return encounters.remove(encounter);
     }
@@ -103,6 +105,8 @@ public class EncounterManager
     private void clearLegacyCombatState(final Encounter encounter) {
         encounter.getMobs().forEach( mob -> {
             mob.setVictim(null);
+            mob.clearCommandQueue();
+            mob.setActions(0.0);
         });
     }
 
