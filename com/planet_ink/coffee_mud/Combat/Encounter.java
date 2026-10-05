@@ -19,16 +19,16 @@ public class Encounter
 {
     private final UUID id; // A unique identifier for the encounter
     private final List<MOB> mobs; // A list of MOBs involved in the encounter
-    
+
     public enum State {
         ACTIVE, 
         ENDING, 
         ENDED
     }
-    
+
     private State state = State.ACTIVE; // The current state of the encounter, set to active by default for the prototype. This may be changed to an earlier state in the future
-    
-    
+
+
     /**
      * Constructs a new Encounter with the specified collection of MOBs.
      * The provided collections of MOBs must not be null, empty, contain null elements, or contain duplicates
@@ -42,7 +42,7 @@ public class Encounter
         if (mobs == null) {
             throw new IllegalArgumentException("MOB collection cannot be null");
         }
-        
+
         final List<MOB> mobList = new ArrayList<>(mobs);
         if (mobList.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("MOB collection cannot contain null elements");
@@ -57,11 +57,11 @@ public class Encounter
         if (mobList.isEmpty()) {
             throw new IllegalArgumentException("MOB collection cannot be empty");
         }
-        
+
         this.id = UUID.randomUUID();
         this.mobs = mobList;
     }
-    
+
     /**
      * Returns the unique identifier for this encounter.
      * @return the UUID of the encounter
@@ -70,7 +70,7 @@ public class Encounter
     {
         return id;
     }
-    
+
     /**
      * Returns an unmodifiable collection of the MOBs involved in this encounter.
      * @return an unmodifiable collection of MOBs
@@ -79,7 +79,7 @@ public class Encounter
     {
         return Collections.unmodifiableList(mobs);
     }
-    
+
     /**
      * Returns the current state of the encounter.
      * <p> This method is synchronized to ensure thread safety when accessing the state variable.
@@ -89,7 +89,7 @@ public class Encounter
     {
         return state;
     }
-    
+
     /**
      * Transitions the encounter to the ENDING state if it is currently ACTIVE.
      * <p> This method is synchronized to ensure thread safety when accessing and modifying the state variable.
@@ -102,7 +102,7 @@ public class Encounter
         state = State.ENDING;
         return true;
     }
-    
+
     /**
      * Transitions the encounter to the ENDED state if it is currently ENDING.
      * <p> This method is synchronized to ensure thread safety when accessing and modifying the state variable.
@@ -115,6 +115,6 @@ public class Encounter
         state = State.ENDED;
         return true;
     }
-    
-    
+
+
 }

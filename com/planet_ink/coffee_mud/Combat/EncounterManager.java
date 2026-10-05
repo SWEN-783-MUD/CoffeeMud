@@ -45,7 +45,15 @@ public class EncounterManager
         encounters.add(encounter);
         return encounter;
     }
-
+    
+    /**
+     * Ends the specified encounter and unregisters its MOBs from the EncounterDirectory.
+     * <p> This method checks if the specified encounter is valid and present in the encounters list.
+     * If valid, it unregisters the encounter from the EncounterDirectory and removes it from the encounters list.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list and the EncounterDirectory.
+     * @param encounter the Encounter instance to be ended
+     * @return true if the encounter was successfully ended and removed, false otherwise
+     */
     public synchronized boolean endEncounter(final Encounter encounter)
     {
         if (encounter == null || !encounters.contains(encounter))
@@ -55,4 +63,24 @@ public class EncounterManager
         directory.unregisterEncounter(encounter); // Unregister the encounter from the EncounterDirectory
         return encounters.remove(encounter);
     }
+    
+    /**
+     * Begins the process of ending an encounter.
+     * <p> This method checks if the specified encounter is valid and present in the encounters list.
+     * If valid, it calls the beginEnding() method on the encounter to initiate the ending process.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list.
+     * @param encounter the Encounter instance to be ended
+     * @return true if the encounter is valid and the ending process has begun, false otherwise
+     */
+    public synchronized boolean beginEndingEncounter(final Encounter encounter) {
+        
+        if (encounter == null || !encounters.contains(encounter))
+        {
+            return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be ended
+        }
+        return encounter.beginEnding();
+    }
+    
+    
+    
 }
