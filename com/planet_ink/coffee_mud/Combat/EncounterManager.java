@@ -25,7 +25,7 @@ public class EncounterManager
     {
         return Collections.unmodifiableSet(new LinkedHashSet<Encounter>(encounters));
     }
-    
+
     /**
      * Starts a new encounter with the specified collection of MOBs.
      * <p> This method attempts to register the MOBs in the encounter using the EncounterDirectory.
@@ -45,7 +45,7 @@ public class EncounterManager
         encounters.add(encounter);
         return encounter;
     }
-    
+
     /**
      * Ends the specified encounter and unregisters its MOBs from the EncounterDirectory.
      * <p> This method checks if the specified encounter is valid and present in the encounters list.
@@ -75,7 +75,7 @@ public class EncounterManager
         directory.unregisterEncounter(encounter);
         return encounters.remove(encounter);
     }
-    
+
     /**
      * Begins the process of ending an encounter.
      * <p> This method checks if the specified encounter is valid and present in the encounters list.
@@ -85,14 +85,27 @@ public class EncounterManager
      * @return true if the encounter is valid and the ending process has begun, false otherwise
      */
     public synchronized boolean beginEndingEncounter(final Encounter encounter) {
-        
+
         if (encounter == null || !encounters.contains(encounter))
         {
             return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be ended
         }
         return encounter.beginEnding();
     }
-    
-    
-    
+
+    /**
+     * Clears the legacy combat state for all MOBs in the specified encounter.
+     * <p> This method iterates through each MOB in the encounter and sets their victim to null,
+     * effectively clearing any legacy combat state that may have been associated with them.
+     * 
+     * @param encounter the Encounter instance whose MOBs' legacy combat state should be cleared
+     */
+    private void clearLegacyCombatState(final Encounter encounter) {
+        encounter.getMobs().forEach( mob -> {
+            mob.setVictim(null);
+        });
+    }
+
+
+
 }
