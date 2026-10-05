@@ -20,6 +20,15 @@ public class Encounter
     private final UUID id; // A unique identifier for the encounter
     private final List<MOB> mobs; // A list of MOBs involved in the encounter
     
+    public enum State {
+        ACTIVE, 
+        ENDING, 
+        ENDED
+    }
+    
+    private State state = State.ACTIVE; // The current state of the encounter, set to active by default for the prototype. This may be changed to an earlier state in the future
+    
+    
     /**
      * Constructs a new Encounter with the specified collection of MOBs.
      * The provided collections of MOBs must not be null, empty, contain null elements, or contain duplicates
@@ -70,4 +79,29 @@ public class Encounter
     {
         return Collections.unmodifiableList(mobs);
     }
+    
+    /**
+     * Returns the current state of the encounter.
+     * <p> This method is synchronized to ensure thread safety when accessing the state variable.
+     * @return the current state of the encounter
+     */
+    public synchronized State getState()
+    {
+        return state;
+    }
+    
+    /**
+     * Transitions the encounter to the ENDING state if it is currently ACTIVE.
+     * <p> This method is synchronized to ensure thread safety when accessing and modifying the state variable.
+     * @return true if the transition to ENDING was successful, false if the encounter was not in the ACTIVE state
+     */
+    synchronized boolean beginEnding() {
+        if (state != State.ACTIVE) {
+            return false; // Cannot transition to ENDING if not currently ACTIVE
+        }
+        state = State.ENDING;
+        return true;
+    }
+    
+    
 }
