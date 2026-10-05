@@ -103,5 +103,18 @@ public class Encounter
         return true;
     }
     
+    /**
+     * Transitions the encounter to the ENDED state if it is currently ENDING.
+     * <p> This method is synchronized to ensure thread safety when accessing and modifying the state variable.
+     * @return true if the transition to ENDED was successful, false if the encounter was not in the ENDING state
+     */
+    synchronized boolean finishEnding() {
+        if (state != State.ENDING) {
+            return false; // Cannot transition to ENDED if not currently ENDING
+        }
+        state = State.ENDED;
+        return true;
+    }
+    
     
 }
