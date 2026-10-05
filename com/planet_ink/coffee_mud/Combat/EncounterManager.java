@@ -25,10 +25,23 @@ public class EncounterManager
     {
         return Collections.unmodifiableList(encounters);
     }
-
-    public Encounter startEncounter(final Collection<MOB> mobs)
+    
+    /**
+     * Starts a new encounter with the specified collection of MOBs.
+     * <p> This method attempts to register the MOBs in the encounter using the EncounterDirectory.
+     * If registration fails (e.g., if any MOB is already registered in another encounter), it returns null.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list and the EncounterDirectory.
+     * @param mobs the collection of MOBs involved in the encounter
+     * @return the newly created Encounter instance if successful, or null if registration fails
+     */
+    public synchronized Encounter startEncounter(final Collection<MOB> mobs)
     {
         final Encounter encounter = new Encounter(mobs);
+        // Attempt to register the MOBs in the encounter using the EncounterDirectory
+        if (!directory.registerMobs(encounter))
+        {
+            return null; // If registration fails, return null to indicate that the encounter could not be started
+        }
         encounters.add(encounter);
         return encounter;
     }
