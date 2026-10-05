@@ -155,6 +155,35 @@ public class Kill extends StdCommand
 			}
 			return false;
 		}
+		// (KILL HOOK) If the target is in the default room, don't allow the attack to go through, but log it and tell the player.
+		final Room spikeRoom = mob.location();
+		if((spikeRoom != null)
+		        && ("New Area#0".equals(spikeRoom.roomID()))
+		        && (!mob.isMonster())) // Limit this hook to player characters only, not monsters
+		        {
+		            if(!mob.mayPhysicallyAttack(target)) // Checks CM's basic attack eligibility rules 
+		            {
+		                mob.tell(L("You are not allowed to attack @x1.", // @x1 represents the target's name
+		                        target.name(mob)));
+		                return false;
+		            }
+
+		            if(mob.isInCombat() || target.isInCombat()) // Checks if either the player or the target is already in combat
+		            {
+		                mob.tell(L("End the existing fight before trying this spike."));
+		                return false;
+		            }
+		            // Log the intercepted attack attempt for monitoring purposes (logs event type, room ID, attacker name, and target name)
+		            Log.sysOut("EncounterSpike", 
+		                    "event=kill-intercepted room=" + spikeRoom.roomID()
+		                    + " attacker=" + mob.Name()
+		                    + " target=" + target.Name());
+		            // Also inform the player that their attack request has been intercepted and logged
+		            mob.tell(L("Encounter spike: received your request to engage @x1.",
+		                    target.name(mob)));
+
+		            return false;
+		        }
 
 		if(mob.isInCombat())
 		{
