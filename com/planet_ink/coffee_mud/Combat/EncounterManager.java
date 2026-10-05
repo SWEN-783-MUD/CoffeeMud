@@ -2,6 +2,7 @@ package com.planet_ink.coffee_mud.Combat;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
@@ -19,7 +20,7 @@ public class EncounterManager
 
 	public List<Encounter> getEncounters()
 	{
-		return encounters;
+		return Collections.unmodifiableList(encounters);
 	}
 
 	public Encounter startEncounter(final Collection<MOB> mobs)
