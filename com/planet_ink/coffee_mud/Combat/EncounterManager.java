@@ -3,8 +3,10 @@ package com.planet_ink.coffee_mud.Combat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
@@ -12,7 +14,7 @@ import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 public class EncounterManager
 {   
     private final EncounterDirectory directory; // The EncounterDirectory instance that manages encounters
-    private final List<Encounter> encounters = new ArrayList<Encounter>();
+    private final Set<Encounter> encounters = new LinkedHashSet<Encounter>();
     private final Room room;
 
     public EncounterManager(final Room room,final EncounterDirectory directory)
@@ -21,9 +23,9 @@ public class EncounterManager
         this.directory = Objects.requireNonNull(directory, "Encounter directory cannot be null");
     }
 
-    public List<Encounter> getEncounters()
+    public synchronized Set<Encounter> getEncounters()
     {
-        return Collections.unmodifiableList(encounters);
+        return Collections.unmodifiableSet(new LinkedHashSet<Encounter>(encounters));
     }
     
     /**
@@ -46,8 +48,13 @@ public class EncounterManager
         return encounter;
     }
 
-    public boolean endEncounter(final Encounter encounter)
+    public synchronized boolean endEncounter(final Encounter encounter)
     {
+        if (encounter == null || !encounters.contains(encounter))
+        {
+            return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be ended
+        }
+        directory.unregisterEncounter(encounter); // Unregister the encounter from the EncounterDirectory
         return encounters.remove(encounter);
     }
 }
