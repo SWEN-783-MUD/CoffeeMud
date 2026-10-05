@@ -55,12 +55,24 @@ public class EncounterManager
      * @return true if the encounter was successfully ended and removed, false otherwise
      */
     public synchronized boolean endEncounter(final Encounter encounter)
-    {
+    {   
+        // Check if the encounter is null or not found in the encounters list
         if (encounter == null || !encounters.contains(encounter))
         {
             return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be ended
         }
-        directory.unregisterEncounter(encounter); // Unregister the encounter from the EncounterDirectory
+        // Check if the encounter is in the ENDING state before proceeding to finish ending it
+        if (encounter.getState() != Encounter.State.ENDING)
+        {
+            return false;
+        }
+        // Call the finishEnding() method on the encounter to complete the ending process
+        if (!encounter.finishEnding())
+        {
+            return false;
+        }
+        // Cleanup: Unregister the encounter from the EncounterDirectory and remove it from the encounters list
+        directory.unregisterEncounter(encounter);
         return encounters.remove(encounter);
     }
     
