@@ -95,7 +95,7 @@ public class StdRoom implements Room
 		setRoomSize(((domainType()&Room.INDOORS)>0)?1:10);
 		recoverPhyStats();
 
-		encounterManager = new EncounterManager(this);
+		encounterManager = new EncounterManager(this, CMLib.encounters().getDirectory());
 	}
 
 	@Override

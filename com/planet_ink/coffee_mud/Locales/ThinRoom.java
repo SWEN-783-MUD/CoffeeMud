@@ -43,7 +43,7 @@ public class ThinRoom implements Room
 	public ThinRoom()
 	{
 		super();
-		encounterManager = new EncounterManager(this);
+		encounterManager = new EncounterManager(this, CMLib.encounters().getDirectory());
 	}
 
 	@Override
