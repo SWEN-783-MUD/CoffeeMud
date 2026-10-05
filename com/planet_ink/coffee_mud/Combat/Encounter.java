@@ -19,7 +19,11 @@ public class Encounter
         this.id = UUID.randomUUID();
         this.mobs = new ArrayList<>(mobs);
     }
-
+    
+    /**
+     * Returns the unique identifier for this encounter.
+     * @return the UUID of the encounter
+     */
     public UUID getId()
     {
         return id;
