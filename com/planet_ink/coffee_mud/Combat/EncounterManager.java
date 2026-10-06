@@ -1,5 +1,6 @@
 package com.planet_ink.coffee_mud.Combat;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -15,13 +16,24 @@ public class EncounterManager
     private final EncounterDirectory directory; // The EncounterDirectory instance that manages encounters
     private final Set<Encounter> encounters = new LinkedHashSet<Encounter>();
     private final Room room;
-
+    
+    /**
+     * Constructs a new EncounterManager for the specified room and encounter directory.
+     * <p> The provided EncounterDirectory must not be null.
+     * @param room the Room instance where encounters are managed
+     * @param directory the EncounterDirectory instance that manages encounters
+     */
     public EncounterManager(final Room room,final EncounterDirectory directory)
     {
         this.room = room;
         this.directory = Objects.requireNonNull(directory, "Encounter directory cannot be null");
     }
-
+    
+    /**
+     * Returns an unmodifiable view of the current set of encounters managed by this EncounterManager.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list.
+     * @return an unmodifiable Set of Encounter instances
+     */
     public synchronized Set<Encounter> getEncounters()
     {
         return Collections.unmodifiableSet(new LinkedHashSet<Encounter>(encounters));
@@ -86,6 +98,58 @@ public class EncounterManager
         }
         return removed;
     }
+    
+    /**
+     * Engages the specified attacker and target in an encounter.
+     * <p> This method checks if both the attacker and target are valid MOBs and not the same.
+     * It also checks if they are already in different encounters, in which case engagement is rejected.
+     * If neither is in an encounter, a new encounter is created with both of them.
+     * If one of them is already in an encounter, that encounter is reused.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list and the EncounterDirectory.
+     * @param attacker the MOB initiating the engagement
+     * @param target the MOB being engaged
+     * @return an EngagementResult indicating whether a new encounter was created, an existing encounter was reused, or engagement was rejected
+     */
+    public synchronized EngagementResult engage(final MOB attacker, final MOB target) {
+        if (attacker == null || target == null || attacker == target) {
+            return EngagementResult.rejected("attacker or target is null or the same");
+        }
+        Encounter encounterA = directory.getEncounter(attacker);
+        Encounter encounterT = directory.getEncounter(target);
+        // Check if both the attacker and target are in different encounters
+        if (encounterA != null && encounterT != null && encounterA != encounterT) {
+            return EngagementResult.rejected("attacker and target are in different encounters");
+        }
+        if (encounterA == null && encounterT == null) {
+            // Neither the attacker or the target are in an encounter, so create a new encounter with both of them
+            if (room == null || attacker.location() != room || target.location() != room) {
+                return EngagementResult.rejected("attacker or target is not in the same room as the encounter manager");
+            }
+            // Create a new encounter with both the attacker and target
+            final Encounter created = startEncounter(Arrays.asList(attacker, target));
+            // If the encounter creation failed, return a rejected result with an appropriate message
+            if (created == null) {
+                return EngagementResult.rejected("failed to create a new encounter");
+            }
+            // If the encounter was successfully created, return a created result with the new encounter
+            return EngagementResult.created(created);
+        }
+        if (encounterA == null || encounterT == null) {
+            return EngagementResult.rejected("one participant already belongs to another encounter");
+        }
+        
+        if(!encounters.contains(encounterA)) {
+            return EngagementResult.rejected("attacker's encounter is not managed by this EncounterManager");
+        }
+        if (encounterA.getState() != Encounter.State.ACTIVE) {
+            return EngagementResult.rejected("attacker's encounter is not active");
+        }
+        // If both the attacker and target are in the same encounter, return a reused result with that encounter
+        return EngagementResult.reused(encounterA);
+        
+        
+    }
+    
 
     /**
      * Begins the process of ending an encounter.
@@ -136,6 +200,13 @@ public class EncounterManager
             logCleanupSnapshot("cleanup-after", encounter, mob);
         });
     }
+    
+    /**
+     * Logging utility methods for encounter events and exceptions. These methods provide a consistent 
+     * way to log encounter-related events, including starting, ending, and cleaning up encounters, as well 
+     * as handling exceptions that may occur during these processes. The logs include relevant context such 
+     * as encounter ID, room ID, state, and participant count to facilitate debugging and monitoring of encounter events.
+     */
 
     /** Returns common context for correlating spike events in the server log. */
     private String encounterLogContext(final Encounter encounter)
