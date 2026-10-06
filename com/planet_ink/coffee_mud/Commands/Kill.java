@@ -14,6 +14,7 @@ import com.planet_ink.coffee_mud.Items.interfaces.*;
 import com.planet_ink.coffee_mud.Locales.interfaces.*;
 import com.planet_ink.coffee_mud.MOBS.interfaces.*;
 import com.planet_ink.coffee_mud.Races.interfaces.*;
+import com.planet_ink.coffee_mud.Combat.EngagementResult;
 
 import java.util.*;
 
@@ -164,7 +165,7 @@ public class Kill extends StdCommand
 		            if(!mob.mayPhysicallyAttack(target)) // Checks CM's basic attack eligibility rules 
 		            {
 		                mob.tell(L("You are not allowed to attack @x1.", // @x1 represents the target's name
-		                        target.name(mob)));
+		                        target.name(mob))); // like a string formatter
 		                return false;
 		            }
 
@@ -178,9 +179,25 @@ public class Kill extends StdCommand
 		                    "event=kill-intercepted room=" + spikeRoom.roomID()
 		                    + " attacker=" + mob.Name()
 		                    + " target=" + target.Name());
-		            // Also inform the player that their attack request has been intercepted and logged
-		            mob.tell(L("Encounter spike: received your request to engage @x1.",
-		                    target.name(mob)));
+		            // Engage the player and target in a new encounter using the EncounterManager
+		            final EngagementResult result =
+		                    spikeRoom.getEncounterManager().engage(mob, target);
+		            switch(result.getOutcome())
+                    {
+                        case CREATED:
+                            
+                            mob.tell(L("You have initiated a new encounter with @x1 in this room. Encounter ID: @x2", target.name(mob), result.getEncounter().getId().toString()));
+                            break;
+                        case REUSED:
+                            mob.tell(L("You are now engaged in an existing encounter with @x1 in this room. Encounter ID: @x2", target.name(mob), result.getEncounter().getId().toString()));
+                            break;
+                        case REJECTED:
+                            mob.tell(L("Your attempt to engage @x1 has been rejected: @x2", target.name(mob), result.getReason()));
+                            break;
+                        default:
+                            mob.tell(L("An unexpected error occurred while trying to engage @x1.", target.name(mob)));
+                            break;
+                    }
 
 		            return false;
 		        }

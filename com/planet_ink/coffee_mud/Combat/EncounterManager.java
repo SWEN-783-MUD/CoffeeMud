@@ -104,7 +104,7 @@ public class EncounterManager
      * <p> This method checks if both the attacker and target are valid MOBs and not the same.
      * It also checks if they are already in different encounters, in which case engagement is rejected.
      * If neither is in an encounter, a new encounter is created with both of them.
-     * If one of them is already in an encounter, that encounter is reused.
+     * An encounter is reused only when both participants belong to the same active encounter owned by this manager.
      * <p> This method is synchronized to ensure thread safety when accessing the encounters list and the EncounterDirectory.
      * @param attacker the MOB initiating the engagement
      * @param target the MOB being engaged
