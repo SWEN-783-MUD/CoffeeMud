@@ -8,9 +8,10 @@ import java.util.Set;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
+import com.planet_ink.coffee_mud.core.Log;
 
 public class EncounterManager
-{   
+{
     private final EncounterDirectory directory; // The EncounterDirectory instance that manages encounters
     private final Set<Encounter> encounters = new LinkedHashSet<Encounter>();
     private final Room room;
@@ -40,9 +41,12 @@ public class EncounterManager
         // Attempt to register the MOBs in the encounter using the EncounterDirectory
         if (!directory.registerMobs(encounter))
         {
+            logEncounterEvent("encounter-start-rejected", encounter,
+                    "reason=membership-conflict registered=false");
             return null; // If registration fails, return null to indicate that the encounter could not be started
         }
         encounters.add(encounter);
+        logEncounterEvent("encounter-started", encounter, "");
         return encounter;
     }
 
@@ -55,7 +59,7 @@ public class EncounterManager
      * @return true if the encounter was successfully ended and removed, false otherwise
      */
     public synchronized boolean endEncounter(final Encounter encounter)
-    {   
+    {
         // Check if the encounter is null or not found in the encounters list
         if (encounter == null || !encounters.contains(encounter))
         {
@@ -68,14 +72,19 @@ public class EncounterManager
         }
         // Clear the legacy combat state for all MOBs in the encounter before finishing the ending process
         clearLegacyCombatState(encounter);
-        // Call the finishEnding() method on the encounter to complete the ending process
+
         if (!encounter.finishEnding())
         {
             return false;
         }
-        
+
         directory.unregisterEncounter(encounter);
-        return encounters.remove(encounter);
+        final boolean removed = encounters.remove(encounter);
+        if (removed)
+        {
+            logEncounterEvent("encounter-ended", encounter, "");
+        }
+        return removed;
     }
 
     /**
@@ -92,24 +101,107 @@ public class EncounterManager
         {
             return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be ended
         }
-        return encounter.beginEnding();
+        final boolean beganEnding = encounter.beginEnding();
+        if (beganEnding)
+        {
+            logEncounterEvent("encounter-ending", encounter, "");
+        }
+        return beganEnding;
     }
 
     /**
      * Clears the legacy combat state for all MOBs in the specified encounter.
-     * <p> This method iterates through each MOB in the encounter and sets their victim to null,
-     * effectively clearing any legacy combat state that may have been associated with them.
-     * 
+     * <p> Clears each participant's legacy target, pending commands, and scheduling credit.
+     * Cleanup failures are logged and rethrown so that membership remains registered.
+     *
      * @param encounter the Encounter instance whose MOBs' legacy combat state should be cleared
      */
     private void clearLegacyCombatState(final Encounter encounter) {
         encounter.getMobs().forEach( mob -> {
-            mob.setVictim(null);
-            mob.clearCommandQueue();
-            mob.setActions(0.0);
+            logCleanupSnapshot("cleanup-before", encounter, mob);
+            String step = "clear-victim";
+            try
+            {
+                mob.setVictim(null);
+                step = "clear-command-queue";
+                mob.clearCommandQueue();
+                step = "reset-action-credit";
+                mob.setActions(0.0);
+            }
+            catch (final RuntimeException ex)
+            {
+                logEncounterException("cleanup-failed", encounter, mob, "step=" + step, ex);
+                throw ex;
+            }
+            logCleanupSnapshot("cleanup-after", encounter, mob);
         });
     }
 
+    /** Returns common context for correlating spike events in the server log. */
+    private String encounterLogContext(final Encounter encounter)
+    {
+        return "encounter=" + encounter.getId()
+                + " room=" + quoteLogValue(room == null ? "<none>" : room.roomID())
+                + " state=" + encounter.getState()
+                + " participants=" + encounter.getMobs().size();
+    }
 
+    private void logEncounterEvent(final String event, final Encounter encounter, final String details)
+    {
+        try
+        {
+            Log.sysOut("EncounterSpike", "event=" + event + " " + encounterLogContext(encounter)
+                    + (details.isEmpty() ? "" : " " + details));
+        }
+        catch (final RuntimeException ex)
+        {
+            logEncounterException("telemetry-failed", encounter, null, "originalEvent=" + event, ex);
+        }
+    }
+
+    /** Snapshot reads are observational; they do not form an atomic view of MOB state. */
+    private void logCleanupSnapshot(final String event, final Encounter encounter, final MOB mob)
+    {
+        try
+        {
+            // getVictim() and isInCombat() can mutate combat state, so do not read them here.
+            final String details = "mob=" + quoteLogValue(mob.Name())
+                    + " queuedCommands=" + mob.commandQueSize()
+                    + " legacyActionCredit=" + mob.actions()
+                    + " hp=" + mob.curState().getHitPoints();
+            logEncounterEvent(event, encounter, details);
+        }
+        catch (final RuntimeException ex)
+        {
+            logEncounterException("telemetry-failed", encounter, mob, "originalEvent=" + event, ex);
+        }
+    }
+
+    /** Telemetry must not replace a cleanup exception or change lifecycle results. */
+    private void logEncounterException(final String event, final Encounter encounter, final MOB mob,
+            final String details, final RuntimeException exception)
+    {
+        try
+        {
+            Log.errOut("EncounterSpike", exception, "event=" + event + " " + encounterLogContext(encounter)
+                    + (mob == null ? "" : " mob=" + quoteLogValue(mob.Name()))
+                    + " " + details);
+        }
+        catch (final RuntimeException ignored)
+        {
+            // Best effort: a broken logger or observation must not interfere with cleanup.
+        }
+    }
+
+    /** Keeps names and room IDs with spaces or control characters on one log line. */
+    private static String quoteLogValue(final String value)
+    {
+        if (value == null)
+        {
+            return "\"<none>\"";
+        }
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t") + "\"";
+    }
 
 }
