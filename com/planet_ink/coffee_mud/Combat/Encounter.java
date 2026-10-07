@@ -21,13 +21,13 @@ public class Encounter
     private final List<MOB> mobs; // A list of MOBs involved in the encounter
 
     public enum State {
+        SETUP,
         ACTIVE, 
         ENDING, 
         ENDED
     }
 
-    private State state = State.ACTIVE; // The current state of the encounter, set to active by default for the prototype. This may be changed to an earlier state in the future
-
+    private State state = State.SETUP; // The encounter begins in setup while initiative is determined.
 
     /**
      * Constructs a new Encounter with the specified collection of MOBs.
@@ -88,6 +88,20 @@ public class Encounter
     public synchronized State getState()
     {
         return state;
+    }
+
+    /**
+     * Transitions the encounter from SETUP to ACTIVE after initiative has been determined.
+     * @return true if the transition was successful, false otherwise
+     */
+    synchronized boolean beginActive()
+    {
+        if (state != State.SETUP)
+        {
+            return false;
+        }
+        state = State.ACTIVE;
+        return true;
     }
 
     /**
