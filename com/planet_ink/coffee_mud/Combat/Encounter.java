@@ -60,7 +60,20 @@ public class Encounter
 
         this.id = UUID.randomUUID();
         this.mobs = mobList;
+		determineInitiative();
     }
+
+	/**
+	 * Determines and stores the initiative order for the MOBs in this encounter.
+	 *
+	 * The initial implementation will use a simple deterministic value based on
+	 * one MOB attribute as a stand-in for Perception. Initiative values and turn
+	 * ordering will be added when encounter turn handling is implemented.
+	 */
+	public void determineInitiative()
+	{
+		// TODO: Determine a deterministic initiative value for each MOB and sort the encounter order.
+	}
 
     /**
      * Returns the unique identifier for this encounter.
