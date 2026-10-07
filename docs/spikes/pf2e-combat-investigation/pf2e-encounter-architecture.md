@@ -13,7 +13,10 @@ This document does not answer the separate questions of how to remove or depreca
 The intended PF2e-inspired combat model uses:
 
 - Encounters as the unit of combat.
+- Encounter participants as the unit of per-MOB combat state.
 - Rounds and turns.
+- A setup phase before active combat begins.
+- Deterministic initiative order.
 - Three actions per participant per turn.
 - One reaction per participant per round.
 - Actions that may cost one, two, or three actions.
@@ -93,7 +96,7 @@ An Encounter should be the authority for combat state and timing.
 
 It should manage:
 
-- Participants.
+- Encounter participants.
 - Party members.
 - Initiative order.
 - Round number.
@@ -102,3 +105,69 @@ It should manage:
 - Reaction availability.
 - Waiting for player input.
 - End conditions.
+
+An encounter begins in a `SETUP` state. During setup, the encounter validates its MOB collection, creates an `EncounterParticipant` for each MOB, and determines the initiative order. Once setup is complete, the encounter transitions to `ACTIVE` combat. It may later transition through `ENDING` before reaching `ENDED`.
+
+The encounter should retain combat-specific state in its participants instead of adding that state directly to the MOB. This keeps the encounter responsible for temporary combat information while allowing a MOB to exist in the world outside of an encounter.
+
+## Responsibilities of EncounterParticipant
+
+`EncounterParticipant` represents one MOB's role in a specific encounter. It is the place to store values that belong to the MOB only for the duration of that encounter.
+
+It should initially provide:
+
+- The participating MOB.
+- The participant's Perception value.
+- The participant's initiative value.
+
+For the initial implementation, Perception is represented by the MOB's Wisdom value. Initiative is then based on that Perception value. This is intentionally simpler than the full PF2e proficiency system while preserving the terminology needed for future expansion.
+
+The participant can later hold:
+
+- Remaining actions for the current turn.
+- Reaction availability for the current round.
+- Queued actions.
+- Conditions and temporary effects.
+- Participant-specific turn state.
+
+## Initiative and turn order
+
+When an encounter is created, it constructs its participants and calls `determineInitiative()` after validation and participant creation. The method sorts participants from highest initiative to lowest initiative. MOB name is used as a deterministic tie-breaker so that equal initiative values do not produce arbitrary ordering.
+
+Conceptually:
+
+~~~java
+public void determineInitiative()
+{
+    // Perception currently equals Wisdom.
+    // Sort highest initiative first and use name to break ties.
+}
+~~~
+
+The ordered participant list is the encounter's turn order. The encounter also tracks the current round and the index of the current participant.
+
+## Round and turn flow
+
+The encounter coordinates turn progression through small lifecycle operations rather than one large turn-processing function:
+
+~~~java
+beginRound()
+currentParticipant()
+beginTurn()
+endTurn()
+advanceTurn()
+~~~
+
+`beginRound()` increments the round number and resets the current participant to the first participant in initiative order. `beginTurn()` prepares the current participant's turn. `endTurn()` completes the current participant's turn and advances the encounter. `advanceTurn()` moves to the next participant, beginning a new round after the final participant has acted.
+
+The initial turn system is intentionally structural. It establishes the order and lifecycle needed for action resolution, but does not yet resolve actions, refresh action resources, process reactions, or wait for player input.
+
+## Encounter lifecycle
+
+The lifecycle is:
+
+~~~text
+SETUP -> ACTIVE -> ENDING -> ENDED
+~~~
+
+`SETUP` is used for participant creation and initiative determination. `ACTIVE` represents normal round and turn processing. `ENDING` allows cleanup to occur before the encounter is removed. `ENDED` is terminal.
