@@ -22,6 +22,8 @@ import com.planet_ink.coffee_mud.MOBS.interfaces.*;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB.Attrib;
 import com.planet_ink.coffee_mud.Races.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
+import com.planet_ink.coffee_mud.Combat.Encounter;
+import com.planet_ink.coffee_mud.Combat.EncounterDirectory;
 
 import java.util.*;
 
@@ -581,6 +583,30 @@ public class MUDFight extends StdLibrary implements CombatLibrary
 	{
 		if((attacker==null)||(!attacker.mayPhysicallyAttack(target)))
 			return false;
+		// BLOCK legacy combat attempts if either attacker or target is registered in an encounter
+		final EncounterDirectory directory = CMLib.encounters().getDirectory();
+		final Encounter attackerEncounter = directory.getEncounter(attacker);
+		final Encounter targetEncounter = directory.getEncounter(target);
+		// if either has registered encounter membership, then log that this legacy attack was blocked and return false
+		if( attackerEncounter != null || targetEncounter != null )
+        {   
+		    final Encounter protectedEncounter = attackerEncounter != null ? attackerEncounter : targetEncounter;
+		    try
+		    {
+		        Log.sysOut("EncounterSpike",
+		                "event=legacy-attack-blocked"
+		                + " path=postAttack"
+		                + " encounter=" + protectedEncounter.getId()
+		                + " state=" + protectedEncounter.getState()
+		                + " attacker=\"" + attacker.Name() + "\""
+		                + " target=\"" + target.Name() + "\"");
+		    }
+		    catch (final RuntimeException ignored)
+		    {
+		    }
+          return false;
+        }
+		
 		if((weapon==null)
 		&&(attacker.isAttributeSet(MOB.Attrib.AUTODRAW)))
 		{
