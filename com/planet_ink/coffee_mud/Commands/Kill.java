@@ -156,7 +156,7 @@ public class Kill extends StdCommand
 			}
 			return false;
 		}
-		// (KILL HOOK) If the target is in the default room, don't allow the attack to go through, but log it and tell the player.
+		// (KILL HOOK) If the target is in the default room, and the player is not a monster, intercept the attack and initiate a new encounter instead
 		final Room spikeRoom = mob.location();
 		if((spikeRoom != null)
 		        && ("New Area#0".equals(spikeRoom.roomID()))

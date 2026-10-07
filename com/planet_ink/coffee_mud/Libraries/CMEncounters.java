@@ -10,8 +10,10 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.EncounterLibrary;
  */
 public class CMEncounters extends StdLibrary implements EncounterLibrary {
     
-    // The EncounterDirectory instance that manages encounters
-    private final EncounterDirectory directory = new EncounterDirectory();
+    /**
+     * The EncounterDirectory instance that manages encounters.
+     */
+    private final EncounterDirectory directory = new EncounterDirectory(); 
     
     /**
      * Returns the unique identifier for this library.
