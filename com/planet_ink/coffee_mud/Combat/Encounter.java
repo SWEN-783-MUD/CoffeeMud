@@ -73,8 +73,16 @@ public class Encounter
 	 * The initial implementation will use each MOB's Wisdom value as its
 	 * Perception value. More complete turn handling will be added later.
 	 */
+	/**
+	 * Determines the initiative order for the participants in this encounter.
+	 * <p>
+	 * Perception is currently represented by each MOB's Wisdom value. Participants
+	 * are sorted from highest initiative to lowest initiative. MOB name is used as
+	 * a deterministic tie-breaker when two participants have the same initiative.
+	 */
 	public void determineInitiative()
 	{
+		// Highest initiative acts first; name ordering keeps ties deterministic.
 		participants.sort(Comparator
 				.comparingInt(EncounterParticipant::getInitiative)
 				.reversed()
