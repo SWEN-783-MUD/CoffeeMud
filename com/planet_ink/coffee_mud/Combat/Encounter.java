@@ -19,6 +19,7 @@ public class Encounter
 {
     private final UUID id; // A unique identifier for the encounter
     private final List<MOB> mobs; // A list of MOBs involved in the encounter
+    private final List<EncounterParticipant> participants;
 
     public enum State {
         SETUP,
@@ -60,19 +61,21 @@ public class Encounter
 
         this.id = UUID.randomUUID();
         this.mobs = mobList;
+		this.participants = new ArrayList<EncounterParticipant>();
+		mobList.forEach(mob -> participants.add(new EncounterParticipant(mob)));
 		determineInitiative();
     }
 
 	/**
 	 * Determines and stores the initiative order for the MOBs in this encounter.
 	 *
-	 * The initial implementation will use a simple deterministic value based on
-	 * one MOB attribute as a stand-in for Perception. Initiative values and turn
-	 * ordering will be added when encounter turn handling is implemented.
+	 * The initial implementation will use each MOB's Wisdom value as its
+	 * Perception value. Initiative values and turn ordering will be added when
+	 * encounter turn handling is implemented.
 	 */
 	public void determineInitiative()
 	{
-		// TODO: Determine a deterministic initiative value for each MOB and sort the encounter order.
+		// TODO: Determine each MOB's Perception from Wisdom and sort the initiative order.
 	}
 
     /**
