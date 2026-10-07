@@ -4,6 +4,7 @@ import java.util.Collection;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,12 +71,14 @@ public class Encounter
 	 * Determines and stores the initiative order for the MOBs in this encounter.
 	 *
 	 * The initial implementation will use each MOB's Wisdom value as its
-	 * Perception value. Initiative values and turn ordering will be added when
-	 * encounter turn handling is implemented.
+	 * Perception value. More complete turn handling will be added later.
 	 */
 	public void determineInitiative()
 	{
-		// TODO: Determine each MOB's Perception from Wisdom and sort the initiative order.
+		participants.sort(Comparator
+				.comparingInt(EncounterParticipant::getInitiative)
+				.reversed()
+				.thenComparing(participant -> participant.getMob().Name(), String.CASE_INSENSITIVE_ORDER));
 	}
 
     /**
