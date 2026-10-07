@@ -21,6 +21,8 @@ public class Encounter
     private final UUID id; // A unique identifier for the encounter
     private final List<MOB> mobs; // A list of MOBs involved in the encounter
     private final List<EncounterParticipant> participants;
+    private int roundNumber = 0;
+    private int currentParticipantIndex = 0;
 
     public enum State {
         SETUP,
@@ -87,6 +89,62 @@ public class Encounter
 				.comparingInt(EncounterParticipant::getInitiative)
 				.reversed()
 				.thenComparing(participant -> participant.getMob().Name(), String.CASE_INSENSITIVE_ORDER));
+	}
+
+	/**
+	 * Begins the next round of the encounter.
+	 * <p>
+	 * The first participant in the initiative order becomes the current
+	 * participant. Action and reaction refreshes will be added later.
+	 */
+	public void beginRound()
+	{
+		roundNumber++;
+		currentParticipantIndex = 0;
+	}
+
+	/**
+	 * Returns the participant whose turn is currently active.
+	 * @return the current encounter participant
+	 */
+	public EncounterParticipant currentParticipant()
+	{
+		return participants.get(currentParticipantIndex);
+	}
+
+	/**
+	 * Begins the current participant's turn.
+	 * <p>
+	 * Action points, reactions, and queued actions will be prepared here later.
+	 */
+	public void beginTurn()
+	{
+		// TODO: Reset the current participant's actions and reaction.
+	}
+
+	/**
+	 * Ends the current participant's turn and advances the encounter.
+	 * <p>
+	 * Queued actions will be resolved or discarded here later.
+	 */
+	public void endTurn()
+	{
+		// TODO: Resolve or discard the current participant's remaining actions.
+		advanceTurn();
+	}
+
+	/**
+	 * Advances the encounter to the next participant in initiative order.
+	 * <p>
+	 * When every participant has acted, a new round begins.
+	 */
+	public void advanceTurn()
+	{
+		currentParticipantIndex++;
+		if (currentParticipantIndex >= participants.size())
+		{
+			beginRound();
+		}
 	}
 
     /**
