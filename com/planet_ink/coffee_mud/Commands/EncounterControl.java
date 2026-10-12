@@ -11,7 +11,8 @@ import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 /**
  * Provides encounter controls for combat.
  * STATUS displays the caller's encounter ID, state, and participants.
- *  END performs manual cleanup and ends the caller's encounter in the test room.
+ * BEGIN activates a setup encounter in the test room.
+ * END cleans up an active encounter, or retries cleanup of an ending encounter.
  */
 public class EncounterControl extends StdCommand
 {   
@@ -48,15 +49,16 @@ public class EncounterControl extends StdCommand
         // Check if the command has the correct number of arguments and if the subcommand is provided.
         if (commands == null || commands.size() != 2 || commands.get(1) == null || commands.get(1).trim().isEmpty())
         {
-            mob.tell(L("Usage: ENCOUNTER STATUS or ENCOUNTER END."));
+            mob.tell(L("Usage: ENCOUNTER STATUS, ENCOUNTER BEGIN, or ENCOUNTER END."));
             return false;
         }
-        // Check if the provided subcommand is valid (either STATUS or END).
+        // Check if the provided subcommand is valid (either STATUS, BEGIN, or END).
         final String subcommand = commands.get(1);
         if (!subcommand.equalsIgnoreCase("STATUS")
-                && !subcommand.equalsIgnoreCase("END"))
+                && !subcommand.equalsIgnoreCase("END")
+                && !subcommand.equalsIgnoreCase("BEGIN"))
         {
-            mob.tell(L("Invalid subcommand. Use STATUS or END."));
+            mob.tell(L("Invalid subcommand. Use STATUS, BEGIN, or END."));
             return false;
         }
 
@@ -79,6 +81,27 @@ public class EncounterControl extends StdCommand
                     mob.tell(L(" - @x1", participant.Name()));
                 }
                 break;
+            case "BEGIN":
+            {
+                final Room room = mob.location();
+                // Attempt to begin the encounter if it is in the SETUP state.
+                if (room == null || !"New Area#0".equals(room.roomID())) {
+                    mob.tell(L("For this spike, encounters may only begin in the test room."));
+                    return false;
+                }
+                final EncounterManager manager = room.getEncounterManager();
+                // Ensure that the encounter is managed by the room's EncounterManager.
+                if (manager == null || !manager.getEncounters().contains(encounter)){
+                    mob.tell(L("This room does not manage your encounter."));
+                    return false;
+                }
+                if (!manager.beginActiveEncounter(encounter)) {
+                    mob.tell(L("Only an encounter in SETUP can be activated. Check ENCOUNTER STATUS."));
+                    return false;
+                }
+                mob.tell(L("Encounter successfully activated."));
+                break;
+            }
             case "END":
             {   
                 final Room room = mob.location();
@@ -99,11 +122,17 @@ public class EncounterControl extends StdCommand
                 // Attempt to end the encounter, handling any exceptions that may occur.
                 try
                 {
+                    final Encounter.State state = encounter.getState();
+                    if (state == Encounter.State.SETUP)
+                    {
+                        mob.tell(L("Use ENCOUNTER BEGIN before ending this encounter."));
+                        return false;
+                    }
                     // If the encounter is active, begin the ending process before attempting to end it.
-                    if (encounter.getState() == Encounter.State.ACTIVE
+                    if (state == Encounter.State.ACTIVE
                             && !manager.beginEndingEncounter(encounter))
                     {
-                        mob.tell(L("Could not begin ending your encounter."));
+                        mob.tell(L("Could not begin ending your encounter. Check ENCOUNTER STATUS."));
                         return false;
                     }
                     // Attempt to end the encounter and inform the user of the result.
@@ -124,7 +153,7 @@ public class EncounterControl extends StdCommand
                 break;
             }
             default:
-                mob.tell(L("Unknown subcommand. Valid subcommands are: STATUS or END."));
+                mob.tell(L("Unknown subcommand. Valid subcommands are: STATUS, BEGIN, or END."));
                 return false;
         }
 

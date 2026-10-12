@@ -104,7 +104,7 @@ public class EncounterManager
      * <p> This method checks if both the attacker and target are valid MOBs and not the same.
      * It also checks if they are already in different encounters, in which case engagement is rejected.
      * If neither is in an encounter, a new encounter is created with both of them.
-     * An encounter is reused only when both participants belong to the same active encounter owned by this manager.
+     * An encounter is reused only when both participants belong to the same setup or active encounter owned by this manager.
      * <p> This method is synchronized to ensure thread safety when accessing the encounters list and the EncounterDirectory.
      * @param attacker the MOB initiating the engagement
      * @param target the MOB being engaged
@@ -141,15 +141,39 @@ public class EncounterManager
         if(!encounters.contains(encounterA)) {
             return EngagementResult.rejected("attacker's encounter is not managed by this EncounterManager");
         }
-        if (encounterA.getState() != Encounter.State.ACTIVE) {
-            return EngagementResult.rejected("attacker's encounter is not active");
+        final Encounter.State state = encounterA.getState();
+        if (state != Encounter.State.ACTIVE && state != Encounter.State.SETUP) {
+            return EngagementResult.rejected("attacker's encounter is not in setup or active");
         }
-        // If both the attacker and target are in the same encounter, return a reused result with that encounter
+        // Reuse the same owned encounter during setup or active combat.
         return EngagementResult.reused(encounterA);
         
         
     }
     
+
+    /**
+     * Begins the process of activating an encounter.
+     * <p> This method checks if the specified encounter is valid and present in the encounters list.
+     * If valid, it calls the beginActive() method on the encounter to transition the encounter into the active state.
+     * <p> This method is synchronized to ensure thread safety when accessing the encounters list.
+     * @param encounter the Encounter instance to be activated
+     * @return true if activation succeeded, false if the encounter is not owned or is not in SETUP
+     */
+    public synchronized boolean beginActiveEncounter(final Encounter encounter) {
+
+        if (encounter == null || !encounters.contains(encounter))
+        {
+            return false; // If the encounter is null or not found in the encounters list, return false to indicate that the encounter could not be started
+        }
+        final boolean beganActive = encounter.beginActive();
+        if (beganActive)
+        {
+            logEncounterEvent("encounter-active", encounter, "");
+        }
+        return beganActive;
+    }
+
 
     /**
      * Begins the process of ending an encounter.
