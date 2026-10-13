@@ -12,3 +12,4 @@
 | As a Combat Participant, I want the ability to queue a reaction so that I can react to a specific event even outside of my turn.|
 | As a Combat Participant, I want the ability to use my actions to cast a spell so that I can utilize its effects.|
 | As a User, I want the ability to lock-in my chosen actions/reactions so that they will be executed.|
+| As a User, I want the ability to check the temporary effects and conditions that affect myself or other participants so that I can strategize around them.|
