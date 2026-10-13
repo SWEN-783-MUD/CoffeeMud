@@ -757,6 +757,32 @@ public class StdRoom implements Room
 		if(!getArea().okMessage(this,msg))
 			return false;
 
+		if(msg.targetMinor() == CMMsg.TYP_ENC_BEGIN)
+		{
+        	final MOB attacker = msg.source();
+        	final MOB target = (msg.target() instanceof MOB)
+            	? (MOB)msg.target()
+            	: null;
+
+        	if((attacker == null) || (target == null))
+           		return false;
+
+        	final EncounterDirectory directory =
+            	CMLib.encounters().getDirectory();
+
+        	final Encounter attackerEncounter =
+            	directory.getEncounter(attacker);
+
+        	final Encounter targetEncounter =
+            	directory.getEncounter(target);
+
+        	// TYP_ENC_BEGIN only starts new encounters.
+        	// Existing encounter participants cannot start another encounter.
+        	if((attackerEncounter != null)
+        	|| (targetEncounter != null))
+            	return false;
+		}
+
 		if(msg.amITarget(this))
 		{
 			final MOB mob=msg.source();
