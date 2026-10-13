@@ -1279,6 +1279,9 @@ public interface CMMsg extends CMCommon
 	/** MINOR_MASK minor action code type, denoting an advancement in age */
 	public static final int TYP_AGE=154;
 
+	/** MINOR_MASK minor action code type, denoting beginning of a encounter */
+	public static final int TYP_ENC_BEGIN = 200;
+
 	/** MINOR_MASK minor action code type, denoting a channel action -- 2000-2047 are channels*/
 	public static final int TYP_CHANNEL=2000; //(2000-2047 are channels)
 
@@ -1395,6 +1398,9 @@ public interface CMMsg extends CMCommon
 	public static final int MSK_CAST_MALICIOUS=MSK_CAST_MALICIOUS_VERBAL|MSK_CAST_MALICIOUS_SOMANTIC;
 	/** Useful MAJOR_MASK shortcut combining other MASK_ constants related to malicious noisy movements */
 	public static final int MSK_MALICIOUS_MOVE=MASK_MALICIOUS|MASK_MOVE|MASK_SOUND;
+
+	// encounter messages
+	public static final int MSG_ENC_BEGIN=TYP_ENC_BEGIN;
 
 	// all major messages
 	/** combined MAJOR and MINOR codes for useful event message type that does absolutely nothing */
