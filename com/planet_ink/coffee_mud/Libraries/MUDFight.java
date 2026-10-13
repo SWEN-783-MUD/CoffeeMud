@@ -583,6 +583,20 @@ public class MUDFight extends StdLibrary implements CombatLibrary
 	{
 		if((attacker==null)||(!attacker.mayPhysicallyAttack(target)))
 			return false;
+
+		final CMMsg msg=CMClass.getMsg(attacker,target,weapon,CMMsg.MSG_ENC_BEGIN,null);
+		final Room R=target.location();
+		if(R!=null)
+		{
+			if(R.okMessage(attacker,msg))
+			{
+				R.send(attacker,msg);
+				return msg.value()>0;
+			}
+		}
+		return false;
+
+		/**
 		// BLOCK legacy combat attempts if either attacker or target is registered in an encounter
 		final EncounterDirectory directory = CMLib.encounters().getDirectory();
 		final Encounter attackerEncounter = directory.getEncounter(attacker);
@@ -624,6 +638,7 @@ public class MUDFight extends StdLibrary implements CombatLibrary
 			}
 		}
 		return false;
+		 */
 	}
 
 	protected static boolean ownerSecurityCheck(final String ownerName, final MOB mob)
