@@ -943,6 +943,22 @@ public class StdRoom implements Room
 	{
 		getArea().executeMsg(this,msg);
 
+		// encounter creation message
+    	if(msg.targetMinor() == CMMsg.TYP_ENC_BEGIN)
+    	{
+        	final MOB attacker = msg.source();
+        	final MOB target = (msg.target() instanceof MOB)
+            	? (MOB)msg.target()
+            	: null;
+
+        	if((attacker != null) && (target != null))
+        	{
+            	getEncounterManager().startEncounter(
+                	Arrays.asList(attacker, target)
+            	);
+        	}
+    	}
+
 		if(msg.amITarget(this))
 		{
 			final MOB mob=msg.source();
