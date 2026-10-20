@@ -71,8 +71,9 @@ Below is a list of requirements for the PF2e combat implementation.
 - Step shall move a participant exactly 5 feet.
 - The grid shall support basic distance checks between participants.
 
-
 ## Out of scope
+
+This is specifically what is out of scope for the MVP- this should not be taken as a hard line for future features.
 
 - Complete PF2e rules implementation.
 - Full proficiency, class, feat, ancestry, and skill systems.
