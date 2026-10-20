@@ -19,7 +19,7 @@ Below is a list of requirements for the PF2e combat implementation.
 - The system shall determine initiative when an encounter begins.
 - The initial implementation shall use Wisdom as the simplified Perception value.
 - The system shall establish a deterministic participant order.
-- The system shall track rounds and the current participant.
+- The system shall track rounds and the current participant (current turn).
 - Participants shall take turns in initiative order.
 - The system shall support advancing from one turn to the next.
 - The system shall start a new round when every participant has had a turn.
@@ -36,14 +36,19 @@ Below is a list of requirements for the PF2e combat implementation.
 ## Reactions
 
 - Each participant shall have access to one reaction per round.
-- (TODO)
+- When another participants turn occurs the system shall determine if a reaction can occur.
+- If a valid reaction can occur, the system shall provide the participant with a choice of reactions.
+- Participants shall be able to 'block' after raising their shield in the previous turn.
 
 ## Combat resolution
 
 - The encounter shall determine when an action resolves.
 - Actions shall be resolved in a deterministic order.
-- The system shall allow striking the enemy as an action
-- (TODO)
+- The system shall allow striking the enemy for one action point.
+- A participant shall only strike an enemy that is 5 feet away.
+- The system shall allow stepping for one action.
+- The system shall allow striding for one action.
+- The system shall allow raising a shield, for one action.
 
 ## Messaging and integration
 
@@ -51,9 +56,22 @@ Below is a list of requirements for the PF2e combat implementation.
 - Encounter behavior shall be handled using `CMMsg`.
 - Encounter lifecycle messages shall be handled through messages.
 
+## Positioning and Movement
+
+- Encounters shall maintain an internal two-dimensional grid.
+- Each participant shall have a grid position represented by coordinates.
+- The grid shall track valid and occupied spaces.
+- Participants shall not occupy the same space.
+- Movement actions shall validate whether the destination is reachable.
+- Stride shall move a participant across the grid according to its Speed.
+- A participants default speed shall be 25 feet.
+- Step shall move a participant exactly 5 feet.
+- The grid shall support basic distance checks between participants.
+
+
 ## Scope boundaries
 
-TODO
+- The initial implementation shall not require complex terrain, flanking, cover, or line-of-effect rules.
 
 ## Possible Stories
 
