@@ -32,29 +32,32 @@ Below is a list of requirements for the PF2e combat implementation.
 - The system shall support free actions.
 - The system shall validate whether a participant has enough actions.
 - The system shall prevent unused actions from carrying into later turns.
+- Participants shall be able to queue actions during their turn.
+- Queued actions shall be validated before they resolve.
+- Queued actions shall resolve in deterministic order.
 
 ## Reactions
 
 - Each participant shall have access to one reaction per round.
-- When another participants turn occurs the system shall determine if a reaction can occur.
+- When an action occurs, the system shall determine whether it triggers any available reactions.
 - If a valid reaction can occur, the system shall provide the participant with a choice of reactions.
-- Participants shall be able to 'block' after raising their shield in the previous turn.
+- Participants shall be able to use Shield Block after raising a shield.
+- Raising a shield shall make Shield Block available until the start of the participant's next turn.
 
 ## Combat resolution
 
 - The encounter shall determine when an action resolves.
 - Actions shall be resolved in a deterministic order.
-- The system shall allow striking the enemy for one action point.
-- A participant shall only strike an enemy that is 5 feet away.
+- The system shall support a melee Strike as a one-action activity.
+- A participant shall only use a melee Strike against a target within 5 feet.
 - The system shall allow stepping for one action.
 - The system shall allow striding for one action.
 - The system shall allow raising a shield, for one action.
 
 ## Messaging and integration
 
-- Encounter shall be started using `CMMsg`.
-- Encounter behavior shall be handled using `CMMsg`.
-- Encounter lifecycle messages shall be handled through messages.
+- Encounters shall be started through a `CMMsg` event.
+- Encounter actions and lifecycle events shall use the `CMMsg` system for validation, dispatch, and notification.
 
 ## Positioning and Movement
 
@@ -69,9 +72,18 @@ Below is a list of requirements for the PF2e combat implementation.
 - The grid shall support basic distance checks between participants.
 
 
-## Scope boundaries
+## Out of scope
 
-- The initial implementation shall not require complex terrain, flanking, cover, or line-of-effect rules.
+- Complete PF2e rules implementation.
+- Full proficiency, class, feat, ancestry, and skill systems.
+- Ranged attacks.
+- Spells and complex abilities.
+- Complex terrain, flanking, cover, and line-of-effect rules.
+- Large-scale or cross-room encounters.
+- Advanced NPC tactics.
+- Every PF2e reaction and free action.
+- Persistent conditions and complex status effects.
+- Production-ready user interfaces or combat visualization.
 
 ## Possible Stories
 
