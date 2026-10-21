@@ -9,12 +9,14 @@ Below is a list of requirements for the PF2e combat implementation.
 ## Encounter management
 
 - The system shall represent combat as an `Encounter`.
+- The MVP shall support one player character against one NPC per encounter.
 - A room shall be able to manage multiple independent encounters.
 - An encounter shall track its participants independently of the room's full inhabitant list.
 - A MOB shall not belong to more than one encounter at the same time.
 - Encounters shall support clear lifecycle states, including setup, active combat, ending, and ended.
 - An encounter shall define completion conditions, including a side being defeated.
-- The system shall define how an encounter handles participants that are defeated.
+- An encounter shall end when either participant is defeated or otherwise unable to continue.
+- If the player disconnects during an encounter, the player shall be treated as defeated and lose the encounter.
 
 ## Initiative and turn order
 
@@ -72,7 +74,7 @@ Below is a list of requirements for the PF2e combat implementation.
 - Participants shall not occupy the same space.
 - Movement actions shall validate whether the destination is reachable.
 - Stride shall move a participant across the grid according to its Speed.
-- A participants default speed shall be 25 feet.
+- A participant's default Speed shall be 25 feet.
 - Step shall move a participant exactly 5 feet.
 - The grid shall support basic distance checks between participants.
 - The grid shall use 5-foot squares.
@@ -89,6 +91,7 @@ This is specifically what is out of scope for the MVP- this should not be taken 
 - Spells and complex abilities.
 - Complex terrain, flanking, cover, and line-of-effect rules.
 - Large-scale or cross-room encounters.
+- Multiple-player or multiple-NPC encounters.
 - Advanced NPC tactics.
 - Every PF2e reaction and free action.
 - Persistent conditions and complex status effects.
