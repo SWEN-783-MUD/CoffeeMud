@@ -13,6 +13,8 @@ Below is a list of requirements for the PF2e combat implementation.
 - An encounter shall track its participants independently of the room's full inhabitant list.
 - A MOB shall not belong to more than one encounter at the same time.
 - Encounters shall support clear lifecycle states, including setup, active combat, ending, and ended.
+- An encounter shall define completion conditions, including a side being defeated.
+- The system shall define how an encounter handles participants that are defeated.
 
 ## Initiative and turn order
 
@@ -70,6 +72,9 @@ Below is a list of requirements for the PF2e combat implementation.
 - A participants default speed shall be 25 feet.
 - Step shall move a participant exactly 5 feet.
 - The grid shall support basic distance checks between participants.
+- The grid shall use 5-foot squares.
+- A participant with the default 25-foot Speed shall be able to move up to 5 squares with one Stride.
+- The MVP grid shall use fixed 10-by-10 boundaries.
 
 ## Out of scope
 
