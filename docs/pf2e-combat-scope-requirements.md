@@ -43,6 +43,8 @@ Below is a list of requirements for the PF2e combat implementation.
 - Each participant shall have access to one reaction per round.
 - When an action occurs, the system shall determine whether it triggers any available reactions.
 - If a valid reaction can occur, the system shall provide the participant with a choice of reactions.
+- The participant affected by a reaction trigger shall choose whether to use an available reaction.
+- The encounter shall pause action resolution while a reaction choice is pending.
 - Participants shall be able to use Shield Block after raising a shield.
 - Raising a shield shall make Shield Block available until the start of the participant's next turn.
 
@@ -52,6 +54,7 @@ Below is a list of requirements for the PF2e combat implementation.
 - Actions shall be resolved in a deterministic order.
 - The system shall support a melee Strike as a one-action activity.
 - A participant shall only use a melee Strike against a target within 5 feet.
+- The encounter shall validate that an action's target is within the action's applicable range before resolving it.
 - The system shall allow stepping for one action.
 - The system shall allow striding for one action.
 - The system shall allow raising a shield, for one action.
