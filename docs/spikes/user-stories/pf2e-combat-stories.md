@@ -2,7 +2,7 @@
 ### Higher priority belongs to those that can be implemented more easily
 | Pathfinder Combat User Stories |
 | ----------- | 
-| High Priority |
+| Higher Priority |
 | As a Combat Participant, I want the ability to choose up to 3 actions during my turn so I can affect the state of combat.|
 | As a Combat Participant, I want the ability to role a recovery check when I am unconscious so that I can attempt to stay alive until I am revived.|
 | As a User, I want to be able to check the turn order at anytime so that I can use that information to plan my actions.|
@@ -12,7 +12,7 @@
 |As a game designer, I want basic saving throws handled automatically, so that damage spells don’t each reimplement halving and doubling.|
 |As a player, I want to attempt a skill check against a DC and see how my roll was calculated, so that I understand why I succeeded or failed.|
 | ----------- |
-| Low Priority |
+| Lower Priority |
 | As a User, I want the ability to check the temporary effects and conditions that affect myself or other participants so that I can strategize around them.|
 | As a Combat Participant, I want the ability to queue a reaction so that I can react to a specific event even outside of my turn.|
 | As a Combat Participant, I want the ability to end my turn manually so that I do not need to use all of my actions if I do not want to.|
