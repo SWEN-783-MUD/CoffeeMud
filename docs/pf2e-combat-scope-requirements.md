@@ -99,4 +99,4 @@ This is specifically what is out of scope for the MVP- this should not be taken 
 
 ## Possible Stories
 
-TODO
+See [PF2e Combat Stories](pf2e-combat-stories.md).
