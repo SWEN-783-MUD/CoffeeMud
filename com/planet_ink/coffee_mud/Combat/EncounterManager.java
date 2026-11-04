@@ -1,8 +1,11 @@
 package com.planet_ink.coffee_mud.Combat;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
+import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
+import com.planet_ink.coffee_mud.core.CMLib;
 
 /**
  * Manages the current combat encounter for a single room.
@@ -32,6 +35,51 @@ public class EncounterManager
 	public Room getRoom()
 	{
 		return room;
+	}
+
+	/**
+	 * @return whether the room is in the area selected by coffeemud.encounterArea
+	 */
+	public boolean isEnabled()
+	{
+		final String areaName=System.getProperty("coffeemud.encounterArea", "");
+		return (!areaName.isEmpty())&&(room.getArea()!=null)
+			&&areaName.equalsIgnoreCase(room.getArea().Name());
+	}
+
+	/**
+	 * Checks whether the player can open an encounter against the NPC.
+	 */
+	public synchronized boolean canStartEncounter(final MOB player, final MOB target)
+	{
+		return (encounter==null)
+			&&isEnabled()
+			&&(player!=null)
+			&&(!player.isMonster())
+			&&(target!=null)
+			&&target.isMonster()
+			&&(player.location()==room)
+			&&(target.location()==room)
+			&&room.isInhabitant(player)
+			&&room.isInhabitant(target)
+			&&(!player.isInCombat())
+			&&(!target.isInCombat())
+			&&(!target.amDead())
+			&&CMLib.flags().isAliveAwakeMobileUnbound(player,true)
+			&&player.mayPhysicallyAttack(target);
+	}
+
+	/**
+	 * Registers a pending encounter after rechecking the opening request.
+	 *
+	 * @return whether a new encounter was registered
+	 */
+	public synchronized boolean startEncounter(final MOB player, final MOB target)
+	{
+		if(!canStartEncounter(player,target))
+			return false;
+		return trySetEncounter(new GeneralEncounter(Arrays.asList(
+			new EncounterParticipant(player),new EncounterParticipant(target))));
 	}
 
 	/**

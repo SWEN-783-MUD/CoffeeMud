@@ -757,6 +757,12 @@ public class StdRoom implements Room
 	{
 		if(!getArea().okMessage(this,msg))
 			return false;
+		if(msg.targetMinor()==CMMsg.TYP_ENC_BEGIN)
+		{
+			if((!(msg.target() instanceof MOB))
+			||(!getEncounterManager().canStartEncounter(msg.source(),(MOB)msg.target())))
+				return false;
+		}
 
 		if(msg.amITarget(this))
 		{
@@ -917,6 +923,8 @@ public class StdRoom implements Room
 	public void executeMsg(final Environmental myHost, final CMMsg msg)
 	{
 		getArea().executeMsg(this,msg);
+		if((msg.targetMinor()==CMMsg.TYP_ENC_BEGIN)&&(msg.target() instanceof MOB))
+			msg.setValue(getEncounterManager().startEncounter(msg.source(),(MOB)msg.target()) ? 1 : 0);
 
 		if(msg.amITarget(this))
 		{
