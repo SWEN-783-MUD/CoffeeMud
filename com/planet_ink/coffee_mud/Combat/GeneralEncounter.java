@@ -19,6 +19,7 @@ public class GeneralEncounter implements Encounter
 	}
 
 	private final List<EncounterParticipant> participants;
+	private State state=State.PENDING;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -37,9 +38,35 @@ public class GeneralEncounter implements Encounter
 	/**
 	 * @return the encounter's current lifecycle state
 	 */
-	public State getState()
+	public synchronized State getState()
 	{
-		return State.PENDING;
+		return state;
+	}
+
+	/**
+	 * Activates the encounter once setup is complete.
+	 *
+	 * @return true if the encounter moved from pending to active
+	 */
+	public synchronized boolean activate()
+	{
+		if(state!=State.PENDING)
+			return false;
+		state=State.ACTIVE;
+		return true;
+	}
+
+	/**
+	 * Marks an active encounter as completed.
+	 *
+	 * @return true if the encounter moved from active to completed
+	 */
+	public synchronized boolean complete()
+	{
+		if(state!=State.ACTIVE)
+			return false;
+		state=State.COMPLETED;
+		return true;
 	}
 
 	@Override
