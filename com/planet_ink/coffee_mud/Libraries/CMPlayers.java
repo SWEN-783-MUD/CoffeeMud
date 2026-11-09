@@ -1186,11 +1186,22 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 		}
 	}
 
+	/** {@inheritDoc} */
 	@Override
-	public void renamePlayer(final MOB mob, final String oldName)
+	public boolean renamePlayer(final MOB mob, final String oldName, final String proposedName)
 	{
-		final String newName = mob.Name();
-		CMLib.database().DBPlayerNameChange(oldName, newName);
+		final String newName = CMStrings.capitalizeAndLower(proposedName);
+		if(newName.trim().isEmpty() || newName.equalsIgnoreCase(oldName))
+			return false;
+
+		// Only publish the new live name once the character row has moved.
+		if(!CMLib.parties().renameCharacter(mob, oldName, newName,
+				() -> !playerExistsAllHosts(newName) && CMLib.database().DBPlayerNameChange(oldName, newName)))
+			return false;
+
+		if(mob.displayText().regionMatches(true, 0, oldName, 0, oldName.length()))
+			mob.setDisplayText(newName + mob.displayText().substring(oldName.length()));
+
 		for(final Enumeration<MOB> p=CMLib.players().players();p.hasMoreElements();)
 		{
 			final MOB playerM=p.nextElement();
@@ -1266,6 +1277,7 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 				}
 			}
 		}
+		return true;
 	}
 
 	protected List<Quad<PrideCat,String,PrideStat,Integer>> findPrideStatEntries(
@@ -1485,11 +1497,15 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 		}
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * Party state changes only after the retirement checks and primary delete succeed.
+	 */
 	@Override
-	public void obliteratePlayer(MOB deadMOB, final boolean deleteAssets, final boolean quiet)
+	public boolean obliteratePlayer(MOB deadMOB, final boolean deleteAssets, final boolean quiet)
 	{
-		if(deadMOB==null)
-			return;
+		if((deadMOB==null)||deadMOB.amDestroyed())
+			return false;
 		if(getPlayer(deadMOB.Name())!=null)
 		{
 			deadMOB=getPlayer(deadMOB.Name());
@@ -1535,15 +1551,9 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 							R.sendOthers(deadMOB,msg);
 						else
 						{
-							addPlayer(deadMOB);
-							if(deadMOB.playerStats()!=null)
-							{
-								final PlayerAccount A=deadMOB.playerStats().getAccount();
-								if(A!=null)
-									A.addNewPlayer(deadMOB);
-							}
+							restorePlayerAfterFailedDeletion(deadMOB);
 							// your session is still gone, but at least you are not
-							return;
+							return false;
 						}
 					}
 				}
@@ -1552,6 +1562,18 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 			{
 			}
 		}
+		// Keep the name reserved in party operations until the deleted state is retired.
+		final PartyLibrary.DeleteResult deletion = CMLib.parties().deleteCharacter(deadMOB,
+				CMLib.database()::DBDeletePlayerOnly);
+		if(deletion == PartyLibrary.DeleteResult.UNAVAILABLE)
+			return false;
+		if(deletion == PartyLibrary.DeleteResult.SAVE_FAILED)
+		{
+			restorePlayerAfterFailedDeletion(deadMOB);
+			Log.errOut("CMPlayers", "Could not delete the character row for " + deadMOB.Name() + ".");
+			return false;
+		}
+
 		this.removeNoPurge(deadMOB.Name()); // if you are deleted, you are not protected
 		final PlayerStats pStats = deadMOB.playerStats();
 		if(pStats != null)
@@ -1571,7 +1593,6 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 		}
 		CMLib.coffeeTables().bump(deadMOB,CoffeeTableRow.STAT_PURGES);
 
-		CMLib.database().DBDeletePlayerOnly(deadMOB.Name());
 		preservePrideRecords(deadMOB);
 		deadMOB.delAllItems(false);
 		for(int i=0;i<deadMOB.numItems();i++)
@@ -1625,6 +1646,21 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 
 		Log.sysOut(deadMOB.name()+" has been deleted.");
 		deadMOB.destroy();
+		return true;
+	}
+
+	/**
+	 * Restores directory and account membership after retirement is vetoed or fails.
+	 * Any session that already logged out stays closed.
+	 *
+	 * @param player the character whose saved record was kept
+	 */
+	private void restorePlayerAfterFailedDeletion(final MOB player)
+	{
+		addPlayer(player);
+		final PlayerStats stats = player.playerStats();
+		if((stats != null) && (stats.getAccount() != null))
+			stats.getAccount().addNewPlayer(player);
 	}
 
 	private List<ThinPlayer> getMaskedUserList(final String mask)
@@ -2517,9 +2553,8 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 						||(M.playerStats().getAccount()==null)
 						||(!M.playerStats().getAccount().isSet(AccountFlag.NOCHARPURGE))))
 					{
-						obliteratePlayer(M,true, true);
-						M.destroy();
-						Log.sysOut(serviceClient.getName(),"AutoPurged user "+name+" ("+M.basePhyStats().level()+"). Last logged in "+(CMLib.time().date2String(userLastLoginDateTime))+".");
+						if(obliteratePlayer(M,true, true))
+							Log.sysOut(serviceClient.getName(),"AutoPurged user "+name+" ("+M.basePhyStats().level()+"). Last logged in "+(CMLib.time().date2String(userLastLoginDateTime))+".");
 					}
 				}
 			}

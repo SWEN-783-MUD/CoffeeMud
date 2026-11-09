@@ -60,7 +60,8 @@ public class PlayerDelete extends StdWebMacro
 		if(M==null)
 			return " @break@";
 
-		CMLib.players().obliteratePlayer(M,true,true);
+		if(!CMLib.players().obliteratePlayer(M,true,true))
+			return "The character could not be deleted.";
 		Log.sysOut("PlayerDelete","Someone destroyed the user "+M.Name()+".");
 		return "";
 	}

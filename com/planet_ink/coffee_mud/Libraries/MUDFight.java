@@ -3608,7 +3608,6 @@ public class MUDFight extends StdLibrary implements CombatLibrary
 										pStat.getExtItems().delItem(I);
 								}
 								CMLib.players().obliteratePlayer(mob,true,CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY));
-								mob.destroy();
 							}
 						});
 						return false;

@@ -2296,12 +2296,13 @@ public class CharCreation extends StdLibrary implements CharCreationLibrary
 			if((parms.length>2)&&(parms[parms.length-1].equalsIgnoreCase("<CONFIRMED>")))
 			{
 				final MOB M=CMLib.players().getLoadPlayer(delPlayer.name());
-				if(M!=null)
+				if(CMLib.players().obliteratePlayer(M, true, CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY)))
 				{
-					CMLib.players().obliteratePlayer(M, true, CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY));
+					acct.delPlayer(delPlayer.name());
+					session.println(L("@x1 has been deleted.",delPlayer.name()));
 				}
-				acct.delPlayer(delPlayer.name());
-				session.println(L("@x1 has been deleted.",delPlayer.name()));
+				else
+					session.println(L("@x1 could not be deleted.",delPlayer.name()));
 			}
 			else
 			{
