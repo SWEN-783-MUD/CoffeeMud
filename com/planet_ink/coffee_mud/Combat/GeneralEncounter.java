@@ -20,6 +20,7 @@ public class GeneralEncounter implements Encounter
 
 	private final List<EncounterParticipant> participants;
 	private State state=State.PENDING;
+	private int round=0;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -44,7 +45,15 @@ public class GeneralEncounter implements Encounter
 	}
 
 	/**
-	 * Activates the encounter once setup is complete.
+	 * @return the current round, or zero before the encounter first activates
+	 */
+	public synchronized int getRound()
+	{
+		return round;
+	}
+
+	/**
+	 * Activates the encounter at round one once setup is complete.
 	 *
 	 * @return true if the encounter moved from pending to active
 	 */
@@ -52,6 +61,7 @@ public class GeneralEncounter implements Encounter
 	{
 		if(state!=State.PENDING)
 			return false;
+		round=1;
 		state=State.ACTIVE;
 		return true;
 	}
