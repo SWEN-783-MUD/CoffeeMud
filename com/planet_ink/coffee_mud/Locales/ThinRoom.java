@@ -1,4 +1,5 @@
 package com.planet_ink.coffee_mud.Locales;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.core.interfaces.*;
 import com.planet_ink.coffee_mud.core.interfaces.ItemPossessor.Expire;
 import com.planet_ink.coffee_mud.core.interfaces.ItemPossessor.Move;
@@ -37,6 +38,13 @@ import java.util.*;
 */
 public class ThinRoom implements Room
 {
+	/** Unloaded placeholders do not own active encounters. */
+	@Override
+	public EncounterManager getEncounterManager()
+	{
+		return null;
+	}
+
 	@Override
 	public String ID()
 	{

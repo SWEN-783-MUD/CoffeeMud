@@ -1,4 +1,5 @@
 package com.planet_ink.coffee_mud.Libraries;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.core.interfaces.*;
 import com.planet_ink.coffee_mud.core.*;
 import com.planet_ink.coffee_mud.core.CMSecurity.DbgFlag;
@@ -581,6 +582,19 @@ public class MUDFight extends StdLibrary implements CombatLibrary
 	{
 		if((attacker==null)||(!attacker.mayPhysicallyAttack(target)))
 			return false;
+		final Room attackRoom=attacker.location();
+		final EncounterManager manager=(attackRoom==null)?null:attackRoom.getEncounterManager();
+		if((!attacker.isMonster())&&(manager!=null)&&manager.isEnabled())
+		{
+			final CMMsg begin=CMClass.getMsg(attacker,target,weapon,CMMsg.TYP_ENC_BEGIN,null);
+			final CMMsg attackCheck=CMClass.getMsg(attacker,target,weapon,CMMsg.MSG_WEAPONATTACK,null);
+			if(attackRoom.okMessage(attacker,begin)&&attackRoom.okMessage(attacker,attackCheck))
+			{
+				attackRoom.send(attacker,begin);
+				return begin.value()==1;
+			}
+			return false;
+		}
 		if((weapon==null)
 		&&(attacker.isAttributeSet(MOB.Attrib.AUTODRAW)))
 		{
