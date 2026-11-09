@@ -18,10 +18,10 @@ import java.util.function.Supplier;
 public final class InMemoryPartyStore implements PartyStore
 {
 	/** The usual time allowed to accept an invitation. */
-	private static final Duration DEFAULT_INVITATION_LIFETIME = Duration.ofMinutes(2);
+	public static final Duration DEFAULT_INVITATION_LIFETIME = Duration.ofMinutes(2);
 
 	/** The usual number of members, including the leader. */
-	private static final int DEFAULT_MEMBER_LIMIT = 6;
+	public static final int DEFAULT_MEMBER_LIMIT = 6;
 
 	/** The clock used to issue and check invitation deadlines. */
 	private final Supplier<Instant> clock;
