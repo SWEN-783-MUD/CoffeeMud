@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -326,6 +327,10 @@ public class PartyCommandTest extends StdTest
 				return Boolean.valueOf(inCombat);
 			case "amDestroyed":
 				return Boolean.FALSE;
+			case "amFollowing":
+				return null;
+			case "followers":
+				return Collections.emptyEnumeration();
 			case "hashCode":
 				return Integer.valueOf(System.identityHashCode(proxy));
 			case "equals":

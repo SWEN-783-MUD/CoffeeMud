@@ -164,6 +164,25 @@ public class Group extends StdCommand
 		return shortCode;
 	}
 
+	/**
+	 * Finds party links that the legacy group transfer would remove or create.
+	 *
+	 * @param newLeader the new native follow target
+	 * @param movers the characters the legacy command would move to that target
+	 * @return whether the transfer would rewire a player-to-player link
+	 */
+	private boolean rewiresPlayerLinks(final MOB newLeader, final List<MOB> movers)
+	{
+		for(final MOB member : movers)
+		{
+			final MOB previous = member.amFollowing();
+			if(member.isPlayer() && (newLeader.isPlayer() || ((previous != null) && previous.isPlayer())))
+				return true;
+		}
+		return false;
+	}
+
+	/** {@inheritDoc} */
 	@Override
 	public boolean execute(final MOB mob, final List<String> commands, final int metaFlags)
 		throws java.io.IOException
@@ -198,6 +217,12 @@ public class Group extends StdCommand
 			}
 			if(newLeaderM != null)
 			{
+				// Party leadership and player follow links are changed independently.
+				if(rewiresPlayerLinks(newLeaderM,allFollowers))
+				{
+					mob.tell(L("Use PARTY LEADER to pass party leadership and FOLLOW or UNFOLLOW to change player links."));
+					return false;
+				}
 				if(newLeaderM.isAttributeSet(Attrib.NOFOLLOW))
 				{
 					mob.tell(L("@x1 is not accepting followers.",newLeaderM.name(mob)));

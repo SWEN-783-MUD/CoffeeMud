@@ -3,19 +3,24 @@ package com.planet_ink.coffee_mud.Libraries;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import com.planet_ink.coffee_mud.Common.interfaces.Session;
+import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.CMProps;
 import com.planet_ink.coffee_mud.core.CMStrings;
+import com.planet_ink.coffee_mud.core.collections.Pair;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
@@ -35,6 +40,9 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** Deleted live objects with commands that may still be finishing. Guarded by characterLock. */
 	private final Set<MOB> retiredCharacters = Collections.newSetFromMap(new WeakHashMap<MOB, Boolean>());
+
+	/** Characters whose session is ending. Guarded by characterLock. */
+	private final Set<MOB> departingFollowers = Collections.newSetFromMap(new WeakHashMap<MOB, Boolean>());
 
 	/** The store for this server run. Access is guarded by characterLock. */
 	private PartyStore store = new InMemoryPartyStore();
@@ -98,6 +106,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 			// Reject delayed commands that still hold the deleted object.
 			retiredCharacters.add(character);
+			clearPartyLinks(character);
 			store.deleteCharacter(characterKey(character));
 			return DeleteResult.DELETED;
 		}
@@ -134,6 +143,162 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
+	public FollowResult checkPlayerFollow(final MOB follower, final MOB target)
+	{
+		synchronized(characterLock)
+		{
+			return validateFollow(follower, target);
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public FollowResult changePlayerFollow(final MOB follower, final MOB target, final BooleanSupplier write)
+	{
+		synchronized(characterLock)
+		{
+			// Detaching and native links involving NPCs keep their existing rules.
+			if(isPlayerCharacter(target))
+			{
+				final FollowResult result = validateFollow(follower, target);
+				if(result != FollowResult.ALLOWED)
+					return result;
+			}
+			return write.getAsBoolean() ? FollowResult.ALLOWED : FollowResult.LINK_CHANGED;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public Room changePlayerLocation(final Supplier<Room> write)
+	{
+		synchronized(characterLock)
+		{
+			return write.get();
+		}
+	}
+
+	/**
+	 * Checks the current session, rooms, roster, and native follow chain.
+	 * Call this while holding characterLock.
+	 *
+	 * @param follower the player starting to follow
+	 * @param target the player they want to follow
+	 * @return the first reason to refuse the change, or {@link FollowResult#ALLOWED}
+	 */
+	private FollowResult validateFollow(final MOB follower, final MOB target)
+	{
+		if(follower == target)
+			return FollowResult.SELF;
+		if(!canStartFollowing(follower) || !canStartFollowing(target))
+			return FollowResult.OFFLINE;
+
+		final Room room = follower.location();
+		if((room == null) || (room != target.location())
+		|| !room.isInhabitant(follower) || !room.isInhabitant(target))
+			return FollowResult.NOT_HERE;
+		final PartySnapshot party = store.findByMember(characterKey(follower));
+		if((party == null) || !party.getMembers().contains(characterKey(target)))
+			return FollowResult.NOT_PARTY;
+		if(follower.isInCombat())
+			return FollowResult.IN_COMBAT;
+		if(follower.amFollowing() == target)
+			return FollowResult.ALREADY_FOLLOWING;
+
+		// Walk the native links so a chain through an NPC also cannot form a loop.
+		final Set<MOB> seen = new HashSet<MOB>();
+		seen.add(follower);
+		MOB leader = target;
+		for(MOB next = target; next != null; next = next.amFollowing())
+		{
+			if(!seen.add(next))
+				return FollowResult.CYCLE;
+			leader = next;
+		}
+		if(target.isAttributeSet(MOB.Attrib.NOFOLLOW) || leader.isAttributeSet(MOB.Attrib.NOFOLLOW))
+			return FollowResult.REFUSED;
+
+		// Reparenting within the target's branch does not add any followers to it.
+		seen.clear();
+		for(MOB next = follower.amFollowing(); (next != null) && seen.add(next); next = next.amFollowing())
+		{
+			if(next == target)
+				return FollowResult.ALLOWED;
+		}
+		if(target.totalFollowers() + follower.totalFollowers() >= target.maxFollowers())
+			return FollowResult.FULL;
+		return FollowResult.ALLOWED;
+	}
+
+	/**
+	 * Checks that a player can take part in a new link. Call this while holding characterLock.
+	 *
+	 * @param player the follower or target
+	 * @return whether the character has an active session and is staying in the game
+	 */
+	private boolean canStartFollowing(final MOB player)
+	{
+		if(!canUseCharacter(player) || departingFollowers.contains(player))
+			return false;
+		final Session session = player.session();
+		return (session != null) && (session.mob() == player) && !session.isStopped()
+				&& (session.getStatus() == Session.SessionStatus.MAINLOOP);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void playerSessionEnding(final MOB player, final Session session)
+	{
+		synchronized(characterLock)
+		{
+			// A delayed close from an old session cannot clear the new session's links.
+			if((session != null) && isPlayerCharacter(player) && (player.session() == session))
+			{
+				departingFollowers.add(player);
+				clearPartyLinks(player);
+			}
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void playerSessionStarted(final MOB player, final Session session)
+	{
+		synchronized(characterLock)
+		{
+			if(isPlayerCharacter(player) && (player.session() == session))
+				departingFollowers.remove(player);
+		}
+	}
+
+	/**
+	 * Clears the player's direct links to their current party. Call this before
+	 * removing their roster entry and while holding characterLock.
+	 *
+	 * @param player the member leaving or disconnecting
+	 */
+	private void clearPartyLinks(final MOB player)
+	{
+		final PartySnapshot party = store.findByMember(characterKey(player));
+		if(party == null)
+			return;
+
+		final MOB leader = player.amFollowing();
+		if(isPlayerCharacter(leader) && party.getMembers().contains(characterKey(leader)))
+			player.setFollowing(null);
+
+		// The native follower enumeration is a snapshot. Descendants keep their own links.
+		for(final Enumeration<Pair<MOB, Short>> followers = player.followers(); followers.hasMoreElements();)
+		{
+			final MOB follower = followers.nextElement().first;
+			if(isPlayerCharacter(follower) && (follower.amFollowing() == player)
+			&& party.getMembers().contains(characterKey(follower)))
+				follower.setFollowing(null);
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public CreateResult createParty(final MOB character)
 	{
 		if(!isPlayerCharacter(character))
@@ -156,7 +321,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public boolean leaveParty(final MOB character)
 	{
-		return Boolean.TRUE.equals(withCharacter(character, key -> Boolean.valueOf(store.leave(key))));
+		return Boolean.TRUE.equals(withCharacter(character, key -> {
+			clearPartyLinks(character);
+			return Boolean.valueOf(store.leave(key));
+		}));
 	}
 
 	/** {@inheritDoc} */
@@ -611,6 +779,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		{
 			store = new InMemoryPartyStore();
 			retiredCharacters.clear();
+			departingFollowers.clear();
 		}
 		return super.shutdown();
 	}

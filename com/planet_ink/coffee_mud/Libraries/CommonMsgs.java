@@ -480,20 +480,12 @@ public class CommonMsgs extends StdLibrary implements CommonCommands
 		forceStandardCommand(mob,"Sleep",new XVector<String>("SLEEP"));
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public void postFollow(final MOB follower, final MOB leader, final boolean quiet)
 	{
-		if(leader!=null)
-		{
-			forceInternalCommand(follower,"Follow",leader,Boolean.valueOf(quiet));
-		}
-		else
-		{
-			if(quiet)
-				forceStandardCommand(follower,"Follow",new XVector<String>("FOLLOW","SELF","UNOBTRUSIVELY"));
-			else
-				forceStandardCommand(follower,"Follow",new XVector<String>("FOLLOW","SELF"));
-		}
+		// A null target detaches directly. FOLLOW SELF now rejects player self-follow.
+		forceInternalCommand(follower,"Follow",leader,Boolean.valueOf(quiet));
 	}
 
 	@Override

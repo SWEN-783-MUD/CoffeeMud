@@ -2,7 +2,10 @@ package com.planet_ink.coffee_mud.Libraries.interfaces;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
+import com.planet_ink.coffee_mud.Common.interfaces.Session;
+import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 
@@ -29,6 +32,102 @@ public interface PartyLibrary extends CMLibrary
 	 * @return whether the actor has player stats
 	 */
 	public boolean isPlayerCharacter(MOB character);
+
+	/** Reasons a player-to-player follow can or cannot go ahead. */
+	public enum FollowResult
+	{
+		/** The link can be made. */
+		ALLOWED(null),
+		/** The player named their own character. */
+		SELF("You cannot follow yourself. Use UNFOLLOW to stop following."),
+		/** An existing link already points to this target. */
+		ALREADY_FOLLOWING("You are already following that player."),
+		/** The link changed while a detach command was being checked. */
+		LINK_CHANGED("Your follow target changed. Try again."),
+		/** Either character is leaving or has no active session. */
+		OFFLINE("Both players must be online to start following."),
+		/** The characters are no longer together. */
+		NOT_HERE("You must be in the same room to follow that player."),
+		/** The target and follower do not share a roster. */
+		NOT_PARTY("You can only follow players in your party."),
+		/** The follower is in combat. */
+		IN_COMBAT("Wait until combat ends before changing who you follow."),
+		/** The target or their follow leader has NOFOLLOW enabled. */
+		REFUSED("That player or their group leader is not accepting followers."),
+		/** The target cannot add another branch under CoffeeMud's follower limit. */
+		FULL("That player cannot accept any more followers."),
+		/** The proposed link would lead back to the follower or into a cycle. */
+		CYCLE("That would create a follow loop.");
+
+		/** The feedback to translate if this action is refused. */
+		private final String message;
+
+		/**
+		 * Associates the outcome with the message shown by the command.
+		 *
+		 * @param message the message, or {@code null} when the link is allowed
+		 */
+		private FollowResult(final String message)
+		{
+			this.message = message;
+		}
+
+		/**
+		 * Gives the caller the reason a link was refused.
+		 *
+		 * @return the feedback, or {@code null} if the action was allowed
+		 */
+		public String getMessage()
+		{
+			return message;
+		}
+	}
+
+	/**
+	 * Checks a player-to-player follow before sending it through room rules.
+	 * The final write checks the same rules again.
+	 *
+	 * @param follower the character starting to follow
+	 * @param target the player they want to follow
+	 * @return whether the proposed link is allowed
+	 */
+	public FollowResult checkPlayerFollow(MOB follower, MOB target);
+
+	/**
+	 * Checks and writes a player's native link under the same lock as membership.
+	 * The write must only update the native link and follower list.
+	 *
+	 * @param follower the character whose outgoing link changes
+	 * @param target the new target, or {@code null} to detach
+	 * @param write the native link update, returning false if its expected old link has changed
+	 * @return the result of the attempted change
+	 */
+	public FollowResult changePlayerFollow(MOB follower, MOB target, BooleanSupplier write);
+
+	/**
+	 * Publishes a player's location under the same lock as follow validation.
+	 * Room and directory callbacks run outside this operation.
+	 *
+	 * @param write the location field update, which returns the previous room
+	 * @return the previous room
+	 */
+	public Room changePlayerLocation(Supplier<Room> write);
+
+	/**
+	 * Clears the departing player's direct party links and blocks new ones until login.
+	 *
+	 * @param player the departing character
+	 * @param session the session ending for that character
+	 */
+	public void playerSessionEnding(MOB player, Session session);
+
+	/**
+	 * Allows new follow links when a character finishes logging in.
+	 *
+	 * @param player the character entering the game
+	 * @param session the current session
+	 */
+	public void playerSessionStarted(MOB player, Session session);
 
 	/**
 	 * Commits a character rename and updates the live name and party state together.
