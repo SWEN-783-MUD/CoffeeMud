@@ -70,8 +70,8 @@ public interface PartyLibrary extends CMLibrary
 	public void requestJoin(MOB candidate, String leaderName);
 
 	/**
-	 * Shows the player's invitations and any requests they can approve.
-	 * Each entry includes its remaining time and the command to use.
+	 * Shows the player's incoming and outgoing invitations and requests.
+	 * Each entry includes its remaining time and available commands.
 	 *
 	 * @param character the player checking their pending entries
 	 */
@@ -92,4 +92,20 @@ public interface PartyLibrary extends CMLibrary
 	 * @param requestId the ID supplied by the leader
 	 */
 	public void approveRequest(MOB leader, long requestId);
+
+	/**
+	 * Turns down an invitation or request if the player is allowed to respond.
+	 *
+	 * @param actor the player declining the entry
+	 * @param entryId the ID supplied by the player
+	 */
+	public void declineEntry(MOB actor, long entryId);
+
+	/**
+	 * Withdraws an invitation or request if the player controls the sending side.
+	 *
+	 * @param actor the player cancelling the entry
+	 * @param entryId the ID supplied by the player
+	 */
+	public void cancelEntry(MOB actor, long entryId);
 }

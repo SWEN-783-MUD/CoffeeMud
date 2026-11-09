@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
@@ -21,6 +22,7 @@ import com.planet_ink.coffee_mud.core.party.PartyStore.JoinStatus;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingView;
 
 /**
  * Checks invitation and roster rules through the party store API.
@@ -196,7 +198,7 @@ public class PartyInvitationTest extends StdTest
 		check(store.findByMember("Bob") == null, "A full party must leave Bob without membership.");
 
 		// A full-party rejection leaves the original invitation available.
-		final List<PartyPendingEntry> pending = store.pendingEntries("Bob");
+		final List<PartyPendingEntry> pending = visibleEntries(store, "Bob");
 		check(pending.size() == 1 && pending.get(0).getExpiresAt().equals(waitlisted.getExpiresAt()),
 				"A full-party rejection must keep the original deadline.");
 		check(store.leave("Member2"), "A member should be able to free a seat.");
@@ -262,7 +264,7 @@ public class PartyInvitationTest extends StdTest
 		store.create("Carol");
 		final PartyPendingEntry first = sendInvite(store, "Alice", "Bob");
 		final PartyPendingEntry competing = sendInvite(store, "Carol", "Bob");
-		check(store.pendingEntries("Bob").equals(Arrays.asList(first, competing)),
+		check(visibleEntries(store, "Bob").equals(Arrays.asList(first, competing)),
 				"Bob should see both invites in the order they were sent.");
 
 		check(store.acceptInvitation("Bob", first.getId()).getStatus() == JoinStatus.JOINED, "Bob can choose Alice's party.");
@@ -278,6 +280,18 @@ public class PartyInvitationTest extends StdTest
 		check(store.leave("Bob"), "Bob should be able to leave his own party.");
 		check(store.acceptInvitation("Bob", beforeCreate.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"Leaving must not restore an invite retired by creation.");
+	}
+
+	/**
+	 * Extracts the underlying entries so cases can check their identity and order.
+	 *
+	 * @param store the case's store
+	 * @param characterKey the character viewing the list
+	 * @return the visible entries in the store's display order
+	 */
+	static List<PartyPendingEntry> visibleEntries(final PartyStore store, final String characterKey)
+	{
+		return store.pendingEntries(characterKey).stream().map(PendingView::getEntry).collect(Collectors.toList());
 	}
 
 	/**

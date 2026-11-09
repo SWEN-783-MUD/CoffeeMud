@@ -1,5 +1,7 @@
 package com.planet_ink.coffee_mud.Tests;
 
+import static com.planet_ink.coffee_mud.Tests.PartyInvitationTest.visibleEntries;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -78,6 +80,8 @@ public class PartyRequestTest extends StdTest
 		expiredAndRemovedRequestsStayRetired();
 		competingApprovalsRespectCapacity();
 		competingPartiesAdmitCandidateOnce();
+		eachSideCanCloseItsOwnEntries();
+		closingAndJoiningHaveOneWinner();
 	}
 
 	/** Checks both command orders, a repeat request, and replacement at the exact deadline. */
@@ -130,9 +134,9 @@ public class PartyRequestTest extends StdTest
 		check(winner.getStatus() == PendingStatus.CREATED, "One worker should open an entry.");
 		final PartyPendingEntry entry = winner.getEntry();
 		checkSameEntry(other, entry, entry.getType());
-		final String reviewer = entry.getType() == Type.INVITATION ? "Bob" : "Alice";
-		check(store.pendingEntries(reviewer).equals(Collections.singletonList(entry)),
-				"Only the winning entry should be actionable.");
+		check(visibleEntries(store, "Alice").equals(Collections.singletonList(entry))
+				&& visibleEntries(store, "Bob").equals(Collections.singletonList(entry)),
+				"Both sides should see just the winning entry.");
 		check(store.findByMember("Bob") == null, "Opening either entry must leave the seat free.");
 	}
 
@@ -147,16 +151,16 @@ public class PartyRequestTest extends StdTest
 				"A request must name a current party leader.");
 
 		final PartyPendingEntry request = sendRequest(store, "Carol", "Alice");
-		check(store.pendingEntries("Alice").equals(Collections.singletonList(request)),
+		check(visibleEntries(store, "Alice").equals(Collections.singletonList(request)),
 				"Alice should see the incoming request.");
-		check(store.pendingEntries("Bob").isEmpty() && store.pendingEntries("Carol").isEmpty(),
-				"Only the current leader should see requests to approve.");
+		check(store.pendingEntries("Bob").isEmpty() && visibleEntries(store, "Carol").equals(Collections.singletonList(request)),
+				"Only the candidate and current leader should see the request.");
 		check(store.approveRequest("Bob", request.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"An ordinary member cannot approve a request.");
 
 		// Succession keeps the same request and shifts approval to Bob.
 		check(store.leave("Alice"), "Alice should be able to leave.");
-		check(store.pendingEntries("Bob").equals(Collections.singletonList(request)),
+		check(visibleEntries(store, "Bob").equals(Collections.singletonList(request)),
 				"Bob should inherit the same request and deadline.");
 		check(store.approveRequest("Alice", request.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"The former leader cannot approve with an old request ID.");
@@ -185,7 +189,7 @@ public class PartyRequestTest extends StdTest
 				"A recreated party and its new request should have fresh IDs.");
 		check(store.approveRequest("Alice", old.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"The retired request cannot join the recreated party.");
-		check(store.pendingEntries("Alice").equals(Collections.singletonList(current)),
+		check(visibleEntries(store, "Alice").equals(Collections.singletonList(current)),
 				"Only the new request should remain available.");
 	}
 
@@ -209,7 +213,7 @@ public class PartyRequestTest extends StdTest
 
 		final boolean bobJoined = results.get(0) == JoinStatus.JOINED;
 		final PartyPendingEntry remaining = bobJoined ? carol : bob;
-		check(store.pendingEntries("Alice").equals(Collections.singletonList(remaining)),
+		check(visibleEntries(store, "Alice").equals(Collections.singletonList(remaining)),
 				"The original request should remain available with the same deadline.");
 		store.leave(bobJoined ? "Bob" : "Carol");
 		check(store.approveRequest("Alice", remaining.getId()).getStatus() == JoinStatus.JOINED,
@@ -238,6 +242,69 @@ public class PartyRequestTest extends StdTest
 		check(Collections.frequency(results, JoinStatus.ENTRY_UNAVAILABLE) == 1, "The other request should be retired.");
 		check(store.pendingEntries("Alice").isEmpty() && store.pendingEntries("Carol").isEmpty()
 				&& store.pendingEntries("Bob").isEmpty(), "Joining must retire all of Bob's pending entries.");
+	}
+
+	/** Checks who can decline or cancel each entry type and what a later retry sees. */
+	private static void eachSideCanCloseItsOwnEntries()
+	{
+		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
+		final PartyStore store = new InMemoryPartyStore(now::get, Duration.ofMinutes(2), 6);
+		store.create("Alice");
+		final long invite = store.invite("Alice", "Bob").getEntry().getId();
+		check(store.cancel("Bob", invite) == null && store.decline("Alice", invite) == null,
+				"Only the candidate can decline the invitation and only the leader can cancel it.");
+		check(store.decline("Eve", invite) == null, "A stranger cannot decline someone else's invitation.");
+		check(store.decline("Bob", invite) != null && store.decline("Bob", invite) == null,
+				"Bob can decline the invitation once.");
+		check(store.acceptInvitation("Bob", invite).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
+				"A declined invitation cannot be accepted.");
+
+		final long newInvite = store.invite("Alice", "Bob").getEntry().getId();
+		check(newInvite != invite && store.cancel("Alice", newInvite) != null,
+				"Alice can cancel a fresh invitation.");
+		check(store.acceptInvitation("Bob", newInvite).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
+				"A cancelled invitation cannot be accepted.");
+
+		final long request = sendRequest(store, "Bob", "Alice").getId();
+		check(store.decline("Bob", request) == null && store.cancel("Alice", request) == null,
+				"Only the leader can decline the request and only the candidate can cancel it.");
+		check(store.cancel("Eve", request) == null, "A stranger cannot cancel another character's request.");
+		check(store.cancel("Bob", request) != null && store.cancel("Bob", request) == null,
+				"Bob can withdraw his request once.");
+		check(store.approveRequest("Alice", request).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
+				"A withdrawn request cannot be approved.");
+
+		final long newRequest = sendRequest(store, "Bob", "Alice").getId();
+		check(newRequest != request && store.decline("Alice", newRequest) != null,
+				"Alice can decline a fresh request.");
+		check(store.approveRequest("Alice", newRequest).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
+				"A declined request cannot be approved.");
+
+		final PartyPendingEntry expired = sendRequest(store, "Bob", "Alice");
+		now.set(expired.getExpiresAt());
+		check(store.cancel("Bob", expired.getId()) == null && store.pendingEntries("Alice").isEmpty(),
+				"An expired request cannot be withdrawn or listed.");
+		check(store.findByMember("Bob") == null, "Closing entries must leave Bob outside the party.");
+	}
+
+	/**
+	 * Races a candidate's withdrawal against the leader's approval.
+	 *
+	 * @throws Exception if a worker fails, times out, or is interrupted
+	 */
+	private static void closingAndJoiningHaveOneWinner() throws Exception
+	{
+		final PartyStore store = new InMemoryPartyStore();
+		store.create("Alice");
+		final long request = sendRequest(store, "Bob", "Alice").getId();
+		final List<Boolean> results = PartyInvitationTest.runTogether(
+				() -> Boolean.valueOf(store.cancel("Bob", request) != null),
+				() -> Boolean.valueOf(store.approveRequest("Alice", request).getStatus() == JoinStatus.JOINED));
+		check(Collections.frequency(results, Boolean.TRUE) == 1, "Only one of cancellation and approval can succeed.");
+		check((store.findByMember("Bob") != null) == results.get(1).booleanValue(),
+				"Membership must agree with whether approval won.");
+		check(store.pendingEntries("Alice").isEmpty() && store.pendingEntries("Bob").isEmpty(),
+				"Either winning operation should retire the request.");
 	}
 
 	/**

@@ -125,13 +125,26 @@ public class Party extends StdCommand
 			break;
 		case "ACCEPT":
 		case "APPROVE":
+		case "DECLINE":
+		case "CANCEL":
 			final long id = readPendingId(mob, action, argument);
 			if(id > 0)
 			{
-				if("ACCEPT".equals(action))
+				switch(action)
+				{
+				case "ACCEPT":
 					parties.acceptInvitation(mob, id);
-				else
+					break;
+				case "APPROVE":
 					parties.approveRequest(mob, id);
+					break;
+				case "DECLINE":
+					parties.declineEntry(mob, id);
+					break;
+				case "CANCEL":
+					parties.cancelEntry(mob, id);
+					break;
+				}
 			}
 			break;
 		default:
@@ -198,7 +211,8 @@ public class Party extends StdCommand
 	private void showUsage(final MOB mob)
 	{
 		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY INVITE <name>, PARTY REQUEST <leader>, "
-				+ "PARTY PENDING, PARTY ACCEPT <id>, or PARTY APPROVE <id>. Use HELP PARTY for details."));
+				+ "PARTY PENDING, PARTY ACCEPT <id>, PARTY APPROVE <id>, PARTY DECLINE <id>, or PARTY CANCEL <id>. "
+				+ "Use HELP PARTY for details."));
 	}
 
 	/**

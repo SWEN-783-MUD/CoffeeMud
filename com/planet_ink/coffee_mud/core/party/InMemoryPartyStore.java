@@ -224,17 +224,17 @@ public final class InMemoryPartyStore implements PartyStore
 	 * @throws NullPointerException if the character key is null
 	 */
 	@Override
-	public synchronized List<PartyPendingEntry> pendingEntries(final String characterKey)
+	public synchronized List<PendingView> pendingEntries(final String characterKey)
 	{
 		Objects.requireNonNull(characterKey);
 		removeExpiredEntries(clock.get());
 
-		final List<PartyPendingEntry> pending = new ArrayList<PartyPendingEntry>();
+		final List<PendingView> pending = new ArrayList<PendingView>();
 		for(final PartyPendingEntry entry : entriesById.values())
 		{
 			final PartySnapshot party = partiesById.get(Long.valueOf(entry.getPartyId()));
-			if((party != null) && canComplete(characterKey, entry, party))
-				pending.add(entry);
+			if((party != null) && (characterKey.equals(entry.getCandidateKey()) || characterKey.equals(party.getLeader())))
+				pending.add(new PendingView(entry, party.getLeader()));
 		}
 		return Collections.unmodifiableList(pending);
 	}
@@ -285,7 +285,7 @@ public final class InMemoryPartyStore implements PartyStore
 
 		final Long partyId = Long.valueOf(entry.getPartyId());
 		final PartySnapshot party = partiesById.get(partyId);
-		if((party == null) || !canComplete(actorKey, entry, party))
+		if((party == null) || !actorKey.equals(responderKey(entry, party)))
 			return new JoinResult(JoinStatus.ENTRY_UNAVAILABLE, null);
 		if(entry.isExpired(clock.get()))
 		{
@@ -309,17 +309,62 @@ public final class InMemoryPartyStore implements PartyStore
 		return new JoinResult(JoinStatus.JOINED, candidateKey);
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public synchronized PendingView decline(final String actorKey, final long entryId)
+	{
+		return closeEntry(actorKey, entryId, true);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized PendingView cancel(final String actorKey, final long entryId)
+	{
+		return closeEntry(actorKey, entryId, false);
+	}
+
 	/**
-	 * Checks which side can complete this entry using the current roster.
+	 * Retires a live entry while holding the same lock used for acceptance and approval.
+	 * An unavailable result gives no details about another character's entry.
 	 *
-	 * @param characterKey the character checking or acting on the entry
+	 * @param actorKey the character acting on the entry
+	 * @param entryId the ID supplied by the actor
+	 * @param decline whether the actor is responding or withdrawing
+	 * @return the closed entry, or {@code null} if the actor cannot close it
+	 */
+	private PendingView closeEntry(final String actorKey, final long entryId, final boolean decline)
+	{
+		Objects.requireNonNull(actorKey);
+		final Long id = Long.valueOf(entryId);
+		final PartyPendingEntry entry = entriesById.get(id);
+		if(entry == null)
+			return null;
+
+		final PartySnapshot party = partiesById.get(Long.valueOf(entry.getPartyId()));
+		if(party == null)
+			return null;
+
+		// A party owns its invitations, so the current leader can withdraw them.
+		final String initiator = entry.getType() == Type.INVITATION ? party.getLeader() : entry.getCandidateKey();
+		final String allowedActor = decline ? responderKey(entry, party) : initiator;
+		if(!actorKey.equals(allowedActor))
+			return null;
+
+		final boolean expired = entry.isExpired(clock.get());
+		entriesById.remove(id);
+		return expired ? null : new PendingView(entry, party.getLeader());
+	}
+
+	/**
+	 * Identifies who can accept, approve, or decline the entry.
+	 *
 	 * @param entry the invitation or request
 	 * @param party the current roster of the party that owns the entry
-	 * @return whether the character can accept or approve this type of entry
+	 * @return the candidate for an invitation or the current leader for a request
 	 */
-	private boolean canComplete(final String characterKey, final PartyPendingEntry entry, final PartySnapshot party)
+	private String responderKey(final PartyPendingEntry entry, final PartySnapshot party)
 	{
-		return characterKey.equals(entry.getType() == Type.INVITATION ? entry.getCandidateKey() : party.getLeader());
+		return entry.getType() == Type.INVITATION ? entry.getCandidateKey() : party.getLeader();
 	}
 
 	/**

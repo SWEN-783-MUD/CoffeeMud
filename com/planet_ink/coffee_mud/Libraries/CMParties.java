@@ -17,6 +17,7 @@ import com.planet_ink.coffee_mud.core.party.PartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyStore.JoinResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingView;
 
 /** Handles live players and feedback around the party store's membership rules. */
 public class CMParties extends StdLibrary implements PartyLibrary
@@ -204,7 +205,8 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			return;
 
 		final Instant now = Instant.now();
-		final List<PartyPendingEntry> pending = store.pendingEntries(characterKey(character));
+		final String key = characterKey(character);
+		final List<PendingView> pending = store.pendingEntries(key);
 		if(pending.isEmpty())
 		{
 			character.tell(L("You have no pending party invitations or requests."));
@@ -212,18 +214,33 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 
 		// Round up so a live entry with less than a second left still shows time.
-		for(final PartyPendingEntry entry : pending)
+		for(final PendingView view : pending)
 		{
+			final PartyPendingEntry entry = view.getEntry();
 			final Duration remaining = Duration.between(now, entry.getExpiresAt());
 			final long roundedSeconds = remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1);
 			final String seconds = Long.toString(Math.max(0, roundedSeconds));
 			final String id = Long.toString(entry.getId());
+			final boolean candidate = key.equals(entry.getCandidateKey());
+
 			if(entry.getType() == Type.INVITATION)
-				character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3.",
-						entry.getSenderKey(), seconds, id));
+			{
+				if(candidate)
+					character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3 or PARTY DECLINE @x3.",
+							entry.getSenderKey(), seconds, id));
+				else
+					character.tell(L("Your party invited @x1. @x2 seconds left. Use PARTY CANCEL @x3.",
+							entry.getCandidateKey(), seconds, id));
+			}
 			else
-				character.tell(L("@x1 asked to join your party. @x2 seconds left. Use PARTY APPROVE @x3.",
-						entry.getCandidateKey(), seconds, id));
+			{
+				if(candidate)
+					character.tell(L("You asked to join @x1's party. @x2 seconds left. Use PARTY CANCEL @x3.",
+							view.getLeaderKey(), seconds, id));
+				else
+					character.tell(L("@x1 asked to join your party. @x2 seconds left. Use PARTY APPROVE @x3 or PARTY DECLINE @x3.",
+							entry.getCandidateKey(), seconds, id));
+			}
 		}
 
 		if(character.isInCombat())
@@ -244,6 +261,52 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	{
 		if(canManageParty(leader))
 			reportJoinResult(leader, store.approveRequest(characterKey(leader), requestId), Type.REQUEST);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void declineEntry(final MOB actor, final long entryId)
+	{
+		if(canManageParty(actor))
+			reportClosedEntry(actor, store.decline(characterKey(actor), entryId), true);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void cancelEntry(final MOB actor, final long entryId)
+	{
+		if(canManageParty(actor))
+			reportClosedEntry(actor, store.cancel(characterKey(actor), entryId), false);
+	}
+
+	/**
+	 * Reports the closure to the actor and to the other side if they are online.
+	 *
+	 * @param actor the player who entered the command
+	 * @param closed the entry closed by the store, or {@code null} if unavailable
+	 * @param declined whether the actor turned it down or withdrew it
+	 */
+	private void reportClosedEntry(final MOB actor, final PendingView closed, final boolean declined)
+	{
+		if(closed == null)
+		{
+			actor.tell(L("That invitation or request is unavailable. Use PARTY PENDING to see what you can do."));
+			return;
+		}
+
+		final PartyPendingEntry entry = closed.getEntry();
+		final String id = Long.toString(entry.getId());
+		final String type = entry.getType() == Type.INVITATION ? L("party invitation") : L("join request");
+		actor.tell(declined ? L("You declined the @x1 (ID @x2).", type, id)
+				: L("You cancelled the @x1 (ID @x2).", type, id));
+
+		// Use the leader captured when the entry closed, even if someone else sent the original invite.
+		final String otherKey = characterKey(actor).equals(entry.getCandidateKey())
+				? closed.getLeaderKey() : entry.getCandidateKey();
+		final MOB other = findOnlinePlayer(otherKey);
+		if(other != null)
+			other.tell(declined ? L("@x1 declined your @x2 (ID @x3).", actor.Name(), type, id)
+					: L("@x1 cancelled the @x2 (ID @x3).", actor.Name(), type, id));
 	}
 
 	/**

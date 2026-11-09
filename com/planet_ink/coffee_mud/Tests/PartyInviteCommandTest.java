@@ -25,6 +25,9 @@ public class PartyInviteCommandTest extends StdTest
 	/** The approval command shown to a leader, including the request ID. */
 	private static final Pattern APPROVE_COMMAND = Pattern.compile("PARTY APPROVE ([0-9]+)");
 
+	/** The ID shown to a sender after opening an invitation or request. */
+	private static final Pattern SENT_ID = Pattern.compile("(?:Invitation|Request) ID is ([0-9]+)");
+
 	/**
 	 * Identifies this fixture for CoffeeMud's test command.
 	 *
@@ -81,6 +84,7 @@ public class PartyInviteCommandTest extends StdTest
 				TestPlayer carol = new TestPlayer("Carol" + suffix, passage))
 			{
 				runWalkthrough(alice, bob, hall, passage);
+				runClosureWalkthrough(alice, bob, carol);
 				runRequestWalkthrough(alice, bob, carol);
 			}
 			return null;
@@ -95,6 +99,59 @@ public class PartyInviteCommandTest extends StdTest
 			passage.destroy();
 			area.destroy();
 		}
+	}
+
+	/**
+	 * Checks which commands pending shows to each side and verifies closure feedback.
+	 *
+	 * @param alice the party leader
+	 * @param bob a member who should not see or close Carol's entries
+	 * @param carol the character outside the party
+	 */
+	private static void runClosureWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
+	{
+		final String aliceName = alice.mob.Name();
+		final String carolName = carol.mob.Name();
+		final String inviteId = sentId(alice.command("PARTY", "INVITE", carolName));
+		check(alice.command("PARTY", "PENDING").contains("PARTY CANCEL " + inviteId),
+				"The leader should be able to find an invitation to cancel.");
+		check(carol.command("PARTY", "PENDING").contains("PARTY DECLINE " + inviteId),
+				"The invite recipient should see how to decline.");
+		check(bob.command("PARTY", "PENDING").contains("no pending party invitations or requests"),
+				"An ordinary member should not see the party's outgoing invites.");
+		check(bob.command("PARTY", "CANCEL", inviteId).contains("unavailable"),
+				"Knowing the ID should not let a member cancel the invite.");
+		check(carol.command("PARTY", "DECLINE", inviteId).contains("You declined the party invitation"),
+				"Carol should be able to turn down her invitation.");
+		check(alice.output().contains(carolName + " declined your party invitation"), "Alice should see the reply.");
+		check(carol.command("PARTY", "ACCEPT", inviteId).contains("unavailable"),
+				"The declined invitation should no longer be usable.");
+
+		final String requestId = sentId(carol.command("PARTY", "REQUEST", aliceName));
+		final String outgoing = carol.command("PARTY", "PENDING");
+		check(outgoing.contains(aliceName) && outgoing.contains("PARTY CANCEL " + requestId),
+				"The requester should see the party leader and the command to withdraw.");
+		check(alice.command("PARTY", "CANCEL", requestId).contains("unavailable"),
+				"The leader can decline a request but cannot withdraw it on Carol's behalf.");
+		checkCombatRestriction(carol, "CANCEL", requestId);
+		check(carol.command("PARTY", "CANCEL", requestId).contains("You cancelled the join request"),
+				"Carol should be able to withdraw after combat.");
+		check(alice.output().contains(carolName + " cancelled the join request"), "Alice should see the withdrawal.");
+		check(alice.command("PARTY", "APPROVE", requestId).contains("unavailable"),
+				"The leader should not be able to approve a withdrawn request.");
+	}
+
+	/**
+	 * Reads the ID from the sender's confirmation.
+	 *
+	 * @param output the output of opening a new invitation or request
+	 * @return the ID as the player would enter it
+	 */
+	private static String sentId(final String output)
+	{
+		final Matcher match = SENT_ID.matcher(output);
+		check(match.find(), "The sender should see the new pending ID. Output was: " + output);
+		return match.group(1);
 	}
 
 	/**
@@ -182,8 +239,10 @@ public class PartyInviteCommandTest extends StdTest
 
 		// An invite that crosses the request should show Alice how to approve the first entry.
 		final String notice = alice.output();
-		final Matcher approve = APPROVE_COMMAND.matcher(notice);
-		check(notice.contains(carolName + " asked to join") && approve.find(),
+		final int start = notice.lastIndexOf(carolName + " asked to join");
+		check(start >= 0, "Alice should be told who asked to join.");
+		final Matcher approve = APPROVE_COMMAND.matcher(notice.substring(start));
+		check(approve.find(),
 				"The leader should get the requester and approval command.");
 		final String id = approve.group(1);
 		check(carol.command("PARTY", "REQUEST", aliceName).contains("Request ID is " + id),

@@ -56,13 +56,13 @@ public interface PartyStore
 	PendingResult requestJoin(String candidateKey, String leaderKey);
 
 	/**
-	 * Lists live invitations the character can accept and live requests they
-	 * can approve as leader, in the order the entries were opened.
+	 * Lists live entries the character can act on, in the order they were opened.
+	 * This includes outgoing entries the character can withdraw.
 	 *
 	 * @param characterKey the character checking their pending entries
 	 * @return an immutable list, which may be empty
 	 */
-	List<PartyPendingEntry> pendingEntries(String characterKey);
+	List<PendingView> pendingEntries(String characterKey);
 
 	/**
 	 * Checks the invitation and adds its recipient to the party in one operation.
@@ -83,6 +83,68 @@ public interface PartyStore
 	 * @return the outcome of the approval attempt
 	 */
 	JoinResult approveRequest(String leaderKey, long requestId);
+
+	/**
+	 * Lets the invited character decline an invitation or the current leader
+	 * decline a request. Checks authority, expiry, and removal in one operation.
+	 *
+	 * @param actorKey the character declining the entry
+	 * @param entryId the pending entry ID
+	 * @return the closed entry and leader at the time of removal, or {@code null} if unavailable
+	 */
+	PendingView decline(String actorKey, long entryId);
+
+	/**
+	 * Lets the current leader withdraw an invitation or the requester withdraw
+	 * a request. Checks authority, expiry, and removal in one operation.
+	 *
+	 * @param actorKey the character withdrawing the entry
+	 * @param entryId the pending entry ID
+	 * @return the closed entry and leader at the time of removal, or {@code null} if unavailable
+	 */
+	PendingView cancel(String actorKey, long entryId);
+
+	/** An immutable entry and the party leader when the store read or closed it. */
+	final class PendingView
+	{
+		/** The invitation or request. */
+		private final PartyPendingEntry entry;
+
+		/** The character leading its party at the time of the operation. */
+		private final String leaderKey;
+
+		/**
+		 * Captures both sides of the entry for command output after the store releases its lock.
+		 *
+		 * @param entry the invitation or request
+		 * @param leaderKey the current leader's character key
+		 */
+		public PendingView(final PartyPendingEntry entry, final String leaderKey)
+		{
+			this.entry = entry;
+			this.leaderKey = leaderKey;
+		}
+
+		/**
+		 * Returns the original entry, including its ID and deadline.
+		 *
+		 * @return the immutable entry
+		 */
+		public PartyPendingEntry getEntry()
+		{
+			return entry;
+		}
+
+		/**
+		 * Identifies the leader when the store captured the entry.
+		 *
+		 * @return the leader's character key
+		 */
+		public String getLeaderKey()
+		{
+			return leaderKey;
+		}
+	}
 
 	/** The outcome of an attempt to open a pending entry. */
 	enum PendingStatus
