@@ -156,6 +156,58 @@ public final class InMemoryPartyStore implements PartyStore
 		return true;
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public synchronized void renameCharacter(final String oldKey, final String newKey)
+	{
+		Objects.requireNonNull(oldKey);
+		Objects.requireNonNull(newKey);
+		if(oldKey.equals(newKey))
+			return;
+
+		// Replace the member in place so join order and the party ID stay intact.
+		final Long partyId = partyIdsByMember.remove(oldKey);
+		if(partyId != null)
+		{
+			final PartySnapshot party = partiesById.get(partyId);
+			final List<String> members = new ArrayList<String>(party.getMembers());
+			members.set(members.indexOf(oldKey), newKey);
+			final String leader = oldKey.equals(party.getLeader()) ? newKey : party.getLeader();
+			partiesById.put(partyId, new PartySnapshot(party.getId(), leader, members));
+			partyIdsByMember.put(newKey, partyId);
+		}
+
+		// Change the names on the original IDs without reopening or moving entries.
+		for(final Map.Entry<Long, PartyPendingEntry> record : entriesById.entrySet())
+		{
+			final PartyPendingEntry entry = record.getValue();
+			final String sender = oldKey.equals(entry.getSenderKey()) ? newKey : entry.getSenderKey();
+			final String candidate = oldKey.equals(entry.getCandidateKey()) ? newKey : entry.getCandidateKey();
+			if(!sender.equals(entry.getSenderKey()) || !candidate.equals(entry.getCandidateKey()))
+				record.setValue(entry.withCharacters(sender, candidate));
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized void deleteCharacter(final String characterKey)
+	{
+		// Use ordinary succession, then retire every attempt to admit this character.
+		leave(characterKey);
+		clearCandidateEntries(characterKey);
+
+		// Surviving invites now name the current leader so a reused name cannot inherit their authorship.
+		for(final Map.Entry<Long, PartyPendingEntry> record : entriesById.entrySet())
+		{
+			final PartyPendingEntry entry = record.getValue();
+			if(characterKey.equals(entry.getSenderKey()))
+			{
+				final PartySnapshot party = partiesById.get(Long.valueOf(entry.getPartyId()));
+				record.setValue(entry.withCharacters(party.getLeader(), entry.getCandidateKey()));
+			}
+		}
+	}
+
 	/**
 	 * {@inheritDoc}
 	 * Checks both members and publishes the new leader under the store lock.

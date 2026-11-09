@@ -36,6 +36,23 @@ public interface PartyStore
 	boolean leave(String characterKey);
 
 	/**
+	 * Moves party state to a character's new key after the directory confirms the rename.
+	 * The directory must reserve both names while changing the key.
+	 *
+	 * @param oldKey the character's previous key
+	 * @param newKey the unused key for the same character
+	 */
+	void renameCharacter(String oldKey, String newKey);
+
+	/**
+	 * Removes a deleted character's membership and pending attempts to join.
+	 * A surviving party keeps its invitations and requests.
+	 *
+	 * @param characterKey the deleted character's key
+	 */
+	void deleteCharacter(String characterKey);
+
+	/**
 	 * Passes leadership to another current member. The party ID, join order,
 	 * and pending entries stay the same.
 	 *

@@ -118,6 +118,18 @@ public final class PartyPendingEntry
 	}
 
 	/**
+	 * Replaces character keys while keeping this entry's ID, type, and deadline.
+	 *
+	 * @param sender the key to show as the sender
+	 * @param candidate the key of the character who can join
+	 * @return a new snapshot of the same pending entry
+	 */
+	PartyPendingEntry withCharacters(final String sender, final String candidate)
+	{
+		return new PartyPendingEntry(id, partyId, type, sender, candidate, expiresAt);
+	}
+
+	/**
 	 * Checks whether the given time has reached or passed the deadline.
 	 *
 	 * @param now the current time from the store's clock
