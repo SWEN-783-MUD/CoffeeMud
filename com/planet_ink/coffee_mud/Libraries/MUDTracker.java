@@ -28,6 +28,7 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.RFilters;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrackingFlag;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrackingFlags;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrailFlag;
+import com.planet_ink.coffee_mud.core.party.ExplorationContext;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Arrival;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Completed;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Failure;
@@ -1970,9 +1971,14 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 				mob.tell(L("You can't go that way."));
 				return false;
 			}
-			mob.setLocation((Room)enterMsg.target());
-			((Room)enterMsg.target()).addInhabitant(mob);
-			((Room)enterMsg.target()).send(mob,enterMsg);
+			final Room destination = (Room)enterMsg.target();
+			final PartyLibrary parties = mob.isPlayer() ? CMLib.parties() : null;
+			if(parties == null)
+				mob.setLocation(destination);
+			else
+				parties.placePlayerFromExit(mob,destination,arrivalSide(thisRoom,destination,opDir));
+			destination.addInhabitant(mob);
+			destination.send(mob,enterMsg);
 		}
 		else
 		if(!placePartyTraveler(batch,step,leaveMsg,enterMsg,opDir))
@@ -2058,11 +2064,15 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 			return false;
 
 		final Room destination;
+		final ExplorationContext exploration;
 		try
 		{
 			step.source.send(step.player,leaveMsg);
 			destination = enterMsg.target() instanceof Room ? (Room)enterMsg.target() : null;
-			if(!batch.parties.arriveTravel(step,destination))
+			final int entrySide = destination == null
+					? ExplorationContext.UNKNOWN_ENTRY : arrivalSide(step.source,destination,suggestedSide);
+			exploration = batch.parties.arriveTravel(step,destination,entrySide);
+			if(exploration == null)
 			{
 				if(step.parent == null)
 					step.player.tell(L("You can't go that way."));
@@ -2082,8 +2092,7 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		}
 		if(step.parent == null)
 			batch.destination = destination;
-		final int entrySide = arrivalSide(step.source,destination,suggestedSide);
-		batch.arrivals.add(new Arrival(step.player,CMStrings.capitalizeAndLower(step.player.Name()),entrySide));
+		batch.arrivals.add(new Arrival(step.player,CMStrings.capitalizeAndLower(step.player.Name()),exploration));
 
 		// An encounter handler receiving this native message can wait for the completed batch.
 		final CMMsg previous = travelArrival.get();
@@ -2119,7 +2128,7 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 			if(destination.getRoomInDir(direction) == source)
 				return direction;
 		}
-		return -1;
+		return ExplorationContext.UNKNOWN_ENTRY;
 	}
 
 	/**

@@ -7,6 +7,8 @@ import java.util.function.Supplier;
 import com.planet_ink.coffee_mud.Common.interfaces.Session;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
+import com.planet_ink.coffee_mud.core.party.ExplorationContext;
+import com.planet_ink.coffee_mud.core.party.ExplorationContext.Activity;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
@@ -33,6 +35,43 @@ public interface PartyLibrary extends CMLibrary
 	 * @return whether the actor has player stats
 	 */
 	public boolean isPlayerCharacter(MOB character);
+
+	/** The result of choosing an exploration activity. */
+	public enum ActivitySelection
+	{
+		/** The choice is now active. */
+		SELECTED,
+		/** The character must wait until combat ends. */
+		IN_COMBAT,
+		/** The character is unavailable for a selection. */
+		UNAVAILABLE
+	}
+
+	/**
+	 * Reads a character's exploration context without changing it.
+	 *
+	 * @param player the character whose context is needed
+	 * @return a fixed snapshot, or null if the character is unavailable
+	 */
+	public ExplorationContext explorationContext(MOB player);
+
+	/**
+	 * Selects an activity for one character. Combat blocks the change while
+	 * leaving the current selection available for inspection.
+	 *
+	 * @param player the character making the choice
+	 * @param activity the new activity
+	 * @return the outcome of the selection
+	 */
+	public ActivitySelection selectExplorationActivity(MOB player, Activity activity);
+
+	/**
+	 * Resets one character to Normal while retaining their entry into the current room.
+	 * The encounter owner calls this for each participant whose encounter ended.
+	 *
+	 * @param player the participant whose activity should reset
+	 */
+	public void resetExplorationActivity(MOB player);
 
 	/** Reasons a player-to-player follow can or cannot go ahead. */
 	public enum FollowResult
@@ -116,6 +155,16 @@ public interface PartyLibrary extends CMLibrary
 	public Room changePlayerLocation(MOB player, Supplier<Room> write);
 
 	/**
+	 * Places a player from a native directional exit outside a coordinated batch.
+	 * The native movement caller still adds the character to the room and sends entry messages.
+	 *
+	 * @param player the character entering the room
+	 * @param destination the actual room entered
+	 * @param entrySide the known return direction, or {@link ExplorationContext#UNKNOWN_ENTRY}
+	 */
+	public void placePlayerFromExit(MOB player, Room destination, int entrySide);
+
+	/**
 	 * Captures an independent step and its current party branches.
 	 *
 	 * @param player the character entering the travel command
@@ -147,9 +196,10 @@ public interface PartyLibrary extends CMLibrary
 	 *
 	 * @param step the character about to enter
 	 * @param destination the room approved by the native move
-	 * @return whether the character was placed
+	 * @param entrySide the known return direction, or {@link ExplorationContext#UNKNOWN_ENTRY}
+	 * @return the context captured at placement, or null if the step was refused
 	 */
-	public boolean arriveTravel(Step step, Room destination);
+	public ExplorationContext arriveTravel(Step step, Room destination, int entrySide);
 
 	/**
 	 * Restores source room membership after an interrupted step if the same
@@ -168,7 +218,8 @@ public interface PartyLibrary extends CMLibrary
 	public boolean detachBlockedFollower(Step step);
 
 	/**
-	 * Clears the departing player's direct party links and blocks new ones until login.
+	 * Clears the departing player's direct party links and exploration choice.
+	 * Blocks new links and activity changes until login.
 	 *
 	 * @param player the departing character
 	 * @param session the session ending for that character
@@ -176,7 +227,7 @@ public interface PartyLibrary extends CMLibrary
 	public void playerSessionEnding(MOB player, Session session);
 
 	/**
-	 * Allows new follow links when a character finishes logging in.
+	 * Allows new links and starts a fresh exploration context when login finishes.
 	 *
 	 * @param player the character entering the game
 	 * @param session the current session

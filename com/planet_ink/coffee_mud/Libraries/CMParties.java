@@ -23,6 +23,8 @@ import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.CMProps;
 import com.planet_ink.coffee_mud.core.CMStrings;
 import com.planet_ink.coffee_mud.core.collections.Pair;
+import com.planet_ink.coffee_mud.core.party.ExplorationContext;
+import com.planet_ink.coffee_mud.core.party.ExplorationContext.Activity;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
@@ -47,16 +49,62 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	/** Characters whose session is ending. Guarded by characterLock. */
 	private final Set<MOB> departingFollowers = Collections.newSetFromMap(new WeakHashMap<MOB, Boolean>());
 
-	/** Changes to live positions and links. Guarded by characterLock. */
-	private final Map<MOB, TravelRevisions> travelRevisions = new WeakHashMap<MOB, TravelRevisions>();
+	/** Live travel revisions and exploration context. Guarded by characterLock. */
+	private final Map<MOB, CharacterTravelState> travelStates = new WeakHashMap<MOB, CharacterTravelState>();
 
-	/** Detects an intervening move or link change even if the original room or target returns. */
-	private static final class TravelRevisions
+	/** Holds one live character's travel and exploration state under characterLock. */
+	private static final class CharacterTravelState
 	{
 		/** Increments on a room change or session departure. */
 		private long position;
 		/** Increments when the outgoing target changes. */
 		private long follow;
+
+		/** The character's selection, which carries across room changes. */
+		private Activity activity = Activity.NORMAL;
+
+		/** The direction back through the entry into the current room, if known. */
+		private int entrySide = ExplorationContext.UNKNOWN_ENTRY;
+
+		/** Increments on an activity or approach change. */
+		private long explorationRevision;
+
+		/**
+		 * Changes the activity without losing the current entry side.
+		 *
+		 * @param selection the new activity
+		 */
+		private void selectActivity(final Activity selection)
+		{
+			if(activity != selection)
+			{
+				activity = selection;
+				explorationRevision++;
+			}
+		}
+
+		/** Clears the last session's activity and approach as one change. */
+		private void resetSession()
+		{
+			if((activity != Activity.NORMAL) || (entrySide != ExplorationContext.UNKNOWN_ENTRY))
+			{
+				activity = Activity.NORMAL;
+				entrySide = ExplorationContext.UNKNOWN_ENTRY;
+				explorationRevision++;
+			}
+		}
+
+		/**
+		 * Takes a fixed view using the character's location at the time of the call.
+		 * The stored state does not need to keep a reference to the room.
+		 *
+		 * @param room the character's current room
+		 * @return the exploration context at this point
+		 */
+		private ExplorationContext snapshot(final Room room)
+		{
+			return new ExplorationContext(activity,room,entrySide,explorationRevision);
+		}
 	}
 
 	/** The store for this server run. Access is guarded by characterLock. */
@@ -78,6 +126,43 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	public boolean isPlayerCharacter(final MOB character)
 	{
 		return character != null && character.playerStats() != null;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public ExplorationContext explorationContext(final MOB player)
+	{
+		synchronized(characterLock)
+		{
+			return canUseCharacter(player) ? travelState(player).snapshot(player.location()) : null;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public ActivitySelection selectExplorationActivity(final MOB player, final Activity activity)
+	{
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(player) || departingFollowers.contains(player) || (activity == null))
+				return ActivitySelection.UNAVAILABLE;
+			if(player.isInCombat())
+				return ActivitySelection.IN_COMBAT;
+
+			travelState(player).selectActivity(activity);
+			return ActivitySelection.SELECTED;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void resetExplorationActivity(final MOB player)
+	{
+		synchronized(characterLock)
+		{
+			if(canUseCharacter(player))
+				travelState(player).selectActivity(Activity.NORMAL);
+		}
 	}
 
 	/**
@@ -122,6 +207,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			// Reject delayed commands that still hold the deleted object.
 			retiredCharacters.add(character);
 			clearPartyLinks(character);
+			travelStates.remove(character);
 			store.deleteCharacter(characterKey(character));
 			return DeleteResult.DELETED;
 		}
@@ -183,7 +269,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			if(!write.getAsBoolean())
 				return FollowResult.LINK_CHANGED;
 			if(previous != target)
-				revisions(follower).follow++;
+				travelState(follower).follow++;
 			return FollowResult.ALLOWED;
 		}
 	}
@@ -194,22 +280,60 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	{
 		synchronized(characterLock)
 		{
+			final CharacterTravelState state = travelState(player);
+			final Room source = player.location();
 			final Room previous = write.get();
-			if(previous != player.location())
-				revisions(player).position++;
+			final Room current = player.location();
+			if(previous != current)
+				state.position++;
+
+			// Location writes without a known exit cannot reuse the old room's approach.
+			if(source != current)
+			{
+				state.entrySide = ExplorationContext.UNKNOWN_ENTRY;
+				state.explorationRevision++;
+			}
 			return previous;
 		}
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public void placePlayerFromExit(final MOB player, final Room destination, final int entrySide)
+	{
+		synchronized(characterLock)
+		{
+			placeFromExit(player,destination,entrySide);
+		}
+	}
+
 	/**
-	 * Looks up a live character's revisions while holding characterLock.
+	 * Records a known approach and the location change as one context update.
+	 * Call while holding characterLock. Same-room moves keep the current approach.
+	 *
+	 * @param player the character entering the room
+	 * @param destination the room entered
+	 * @param entrySide the actual return direction, or {@link ExplorationContext#UNKNOWN_ENTRY}
+	 */
+	private void placeFromExit(final MOB player, final Room destination, final int entrySide)
+	{
+		final Room source = player.location();
+		player.setLocation(destination);
+
+		// Replace the default unknown entry from setLocation with the known approach for this same move.
+		if((source != destination) && (player.location() == destination))
+			travelState(player).entrySide = entrySide;
+	}
+
+	/**
+	 * Looks up a live character's travel state while holding characterLock.
 	 *
 	 * @param player the character whose travel state is needed
-	 * @return their revisions, initialized on first use
+	 * @return their state, initialized on first use
 	 */
-	private TravelRevisions revisions(final MOB player)
+	private CharacterTravelState travelState(final MOB player)
 	{
-		return travelRevisions.computeIfAbsent(player, key -> new TravelRevisions());
+		return travelStates.computeIfAbsent(player, key -> new CharacterTravelState());
 	}
 
 	/** {@inheritDoc} */
@@ -254,9 +378,9 @@ public class CMParties extends StdLibrary implements PartyLibrary
 					children.add(captureStep(follower, player, source, party, seen));
 			}
 		}
-		final TravelRevisions revision = revisions(player);
+		final CharacterTravelState state = travelState(player);
 		return new Step(player, parent, source, player.location(), player.session(), party == null ? 0 : party.getId(),
-				revision.position, revision.follow, parent == null ? 0 : revisions(parent).position, children);
+				state.position, state.follow, parent == null ? 0 : travelState(parent).position, children);
 	}
 
 	/** {@inheritDoc} */
@@ -284,19 +408,19 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
-	public boolean arriveTravel(final Step step, final Room destination)
+	public ExplorationContext arriveTravel(final Step step, final Room destination, final int entrySide)
 	{
 		synchronized(characterLock)
 		{
 			if(!isCurrentStep(step, destination) || step.source.isInhabitant(step.player))
-				return false;
+				return null;
 
 			// Publish the room and any independent unlink together, before enter callbacks run.
 			if((step.parent == null) && (destination != step.source) && isPlayerCharacter(step.player.amFollowing()))
 				step.player.setFollowing(null);
-			step.player.setLocation(destination);
+			placeFromExit(step.player,destination,entrySide);
 			destination.addInhabitant(step.player);
-			return true;
+			return travelState(step.player).snapshot(destination);
 		}
 	}
 
@@ -340,7 +464,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			return true;
 		return isOriginalFollow(step) && canStartFollowing(step.parent)
 				&& (step.parent.location() == destination) && destination.isInhabitant(step.parent)
-				&& (revisions(step.parent).position == step.parentPositionRevision + 1);
+				&& (travelState(step.parent).position == step.parentPositionRevision + 1);
 	}
 
 	/**
@@ -353,7 +477,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	{
 		return canStartFollowing(step.player) && (step.player.session() == step.session)
 				&& (step.player.location() == step.startingRoom)
-				&& (revisions(step.player).position == step.positionRevision);
+				&& (travelState(step.player).position == step.positionRevision);
 	}
 
 	/**
@@ -364,7 +488,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	 */
 	private boolean isOriginalFollow(final Step step)
 	{
-		if((step.player.amFollowing() != step.parent) || (revisions(step.player).follow != step.followRevision))
+		if((step.player.amFollowing() != step.parent) || (travelState(step.player).follow != step.followRevision))
 			return false;
 		final PartySnapshot party = store.findByMember(characterKey(step.player));
 		return (party != null) && (party.getId() == step.partyId)
@@ -447,8 +571,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			// A delayed close from an old session cannot clear the new session's links.
 			if((session != null) && isPlayerCharacter(player) && (player.session() == session))
 			{
+				final CharacterTravelState state = travelState(player);
 				if(departingFollowers.add(player))
-					revisions(player).position++;
+					state.position++;
+				state.resetSession();
 				clearPartyLinks(player);
 			}
 		}
@@ -461,7 +587,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		synchronized(characterLock)
 		{
 			if(isPlayerCharacter(player) && (player.session() == session))
+			{
 				departingFollowers.remove(player);
+				travelState(player).resetSession();
+			}
 		}
 	}
 
@@ -974,7 +1103,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			store = new InMemoryPartyStore();
 			retiredCharacters.clear();
 			departingFollowers.clear();
-			travelRevisions.clear();
+			travelStates.clear();
 		}
 		return super.shutdown();
 	}

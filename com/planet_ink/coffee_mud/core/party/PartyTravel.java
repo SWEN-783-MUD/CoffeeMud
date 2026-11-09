@@ -81,19 +81,22 @@ public final class PartyTravel
 		public final String characterKey;
 		/** The direction back through the actual destination connection, or -1 if unknown. */
 		public final int entrySide;
+		/** The player's activity and approach at the time they entered the room. */
+		public final ExplorationContext exploration;
 
 		/**
 		 * Records a committed room entry.
 		 *
 		 * @param player the character who arrived
 		 * @param characterKey the character's key at arrival
-		 * @param entrySide the direction of the return connection, or -1
+		 * @param exploration the fixed exploration context from placement
 		 */
-		public Arrival(final MOB player, final String characterKey, final int entrySide)
+		public Arrival(final MOB player, final String characterKey, final ExplorationContext exploration)
 		{
 			this.player = player;
 			this.characterKey = characterKey;
-			this.entrySide = entrySide;
+			this.exploration = exploration;
+			this.entrySide = exploration.entrySide;
 		}
 	}
 
