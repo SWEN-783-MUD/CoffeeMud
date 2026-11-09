@@ -5,13 +5,13 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Stores party membership and pending invitations by character key.
+ * Stores party membership and pending entries by character key.
  * Each change checks its rules and updates the roster in one operation.
  */
 public interface PartyStore
 {
 	/**
-	 * Creates a party led by the character and clears their pending invitations.
+	 * Creates a party led by the character and clears their pending attempts to join elsewhere.
 	 *
 	 * @param characterKey the character creating the party
 	 * @return the new roster, or {@code null} if the character already has a party
@@ -28,7 +28,7 @@ public interface PartyStore
 
 	/**
 	 * Removes a member. When the leader leaves, the earliest remaining member
-	 * becomes leader. When the last member leaves, the party and its invites are removed.
+	 * becomes leader. When the last member leaves, the party and its pending entries are removed.
 	 *
 	 * @param characterKey the character leaving the party
 	 * @return whether the character left a party
@@ -36,100 +36,163 @@ public interface PartyStore
 	boolean leave(String characterKey);
 
 	/**
-	 * Lets a leader invite a character who has no party. A repeat returns the
-	 * existing invitation with its original deadline.
+	 * Lets a leader invite a character who has no party. Returns any live
+	 * invitation or request already open for this candidate and party.
 	 *
 	 * @param leaderKey the character sending the invitation
 	 * @param recipientKey the character being invited
-	 * @return the outcome and the invitation when one is available
+	 * @return the outcome and any new or existing entry
 	 */
-	InviteResult invite(String leaderKey, String recipientKey);
+	PendingResult invite(String leaderKey, String recipientKey);
 
 	/**
-	 * Lists the character's live invitations in the order they were sent.
+	 * Lets a character ask to join a party by naming its current leader.
+	 * Keeps the original type, ID, and deadline if an entry is already open.
 	 *
-	 * @param characterKey the invited character
-	 * @return an immutable list of invitations, which may be empty
+	 * @param candidateKey the character who wants to join
+	 * @param leaderKey the named party leader
+	 * @return the outcome and any new or existing entry
 	 */
-	List<PartyInvitation> pendingInvitations(String characterKey);
+	PendingResult requestJoin(String candidateKey, String leaderKey);
+
+	/**
+	 * Lists live invitations the character can accept and live requests they
+	 * can approve as leader, in the order the entries were opened.
+	 *
+	 * @param characterKey the character checking their pending entries
+	 * @return an immutable list, which may be empty
+	 */
+	List<PartyPendingEntry> pendingEntries(String characterKey);
 
 	/**
 	 * Checks the invitation and adds its recipient to the party in one operation.
-	 * A successful join clears the character's other pending invitations.
+	 * A successful join clears the character's other pending entries.
 	 *
 	 * @param characterKey the character accepting the invitation
 	 * @param invitationId the ID of the invitation to accept
 	 * @return the outcome of the acceptance attempt
 	 */
-	AcceptResult acceptInvitation(String characterKey, long invitationId);
+	JoinResult acceptInvitation(String characterKey, long invitationId);
 
-	/** The outcome of an attempt to send a party invitation. */
-	enum InviteStatus
+	/**
+	 * Lets the current leader approve a request and add the candidate in one
+	 * operation. A successful join clears the candidate's other pending entries.
+	 *
+	 * @param leaderKey the character approving the request
+	 * @param requestId the ID of the request to approve
+	 * @return the outcome of the approval attempt
+	 */
+	JoinResult approveRequest(String leaderKey, long requestId);
+
+	/** The outcome of an attempt to open a pending entry. */
+	enum PendingStatus
 	{
-		/** The store created a new invitation. */
+		/** The store opened a new entry. */
 		CREATED,
-		/** An invitation to this party is already pending for the recipient. */
+		/** This party and candidate already have an open invitation or request. */
 		ALREADY_PENDING,
-		/** The sender does not lead a party. */
+		/** The named leader does not currently lead a party. */
 		NOT_LEADER,
-		/** The recipient already belongs to a party. */
+		/** The candidate already belongs to a party. */
 		ALREADY_MEMBER
 	}
 
-	/** The outcome of an attempt to accept a party invitation. */
-	enum AcceptResult
+	/** The outcome of an acceptance or approval. */
+	enum JoinStatus
 	{
-		/** The recipient joined the party. */
+		/** The candidate joined the party. */
 		JOINED,
-		/** The character already belongs to a party. */
+		/** The candidate already belongs to a party. */
 		ALREADY_MEMBER,
-		/** The ID does not identify an invitation available to this character. */
-		INVITATION_UNAVAILABLE,
-		/** The invitation expired before acceptance. */
+		/** The ID does not identify an entry of the right type that this actor can use. */
+		ENTRY_UNAVAILABLE,
+		/** The entry reached its deadline before acceptance or approval. */
 		EXPIRED,
-		/** The party is full. The recipient can retry before the deadline. */
+		/** The party is full. The actor can retry before the deadline. */
 		PARTY_FULL
 	}
 
-	/** Pairs the invite outcome with the record needed for player feedback. */
-	final class InviteResult
+	/** Pairs the opening outcome with the entry needed for player feedback. */
+	final class PendingResult
 	{
 		/** The outcome of the operation. */
-		private final InviteStatus status;
+		private final PendingStatus status;
 
-		/** The invitation created or found by the operation, when available. */
-		private final PartyInvitation invitation;
+		/** The entry created or found by the operation, when available. */
+		private final PartyPendingEntry entry;
 
 		/**
-		 * Records the result of an invite attempt.
+		 * Records the result of opening an invitation or request.
 		 *
 		 * @param status the operation's outcome
-		 * @param invitation the created or existing invitation, or {@code null} on rejection
+		 * @param entry the new or existing entry, or {@code null} on rejection
 		 */
-		public InviteResult(final InviteStatus status, final PartyInvitation invitation)
+		public PendingResult(final PendingStatus status, final PartyPendingEntry entry)
 		{
 			this.status = status;
-			this.invitation = invitation;
+			this.entry = entry;
 		}
 
 		/**
 		 * Returns the outcome for choosing a player message.
 		 *
-		 * @return the invite status
+		 * @return the opening status
 		 */
-		public InviteStatus getStatus()
+		public PendingStatus getStatus()
 		{
 			return status;
 		}
 
 		/**
-		 * Returns the invite details for a new or repeated invitation.
+		 * Returns the entry, which may have been opened by the other side.
 		 *
-		 * @return the invitation, or {@code null} on rejection
+		 * @return the entry, or {@code null} on rejection
 		 */
-		public PartyInvitation getInvitation()
+		public PartyPendingEntry getEntry()
 		{
-			return invitation;
+			return entry;
+		}
+	}
+
+	/** Reports an admission attempt and identifies the member added on success. */
+	final class JoinResult
+	{
+		/** The outcome of the operation. */
+		private final JoinStatus status;
+
+		/** The character added to the party, when the join succeeds. */
+		private final String joinedCandidateKey;
+
+		/**
+		 * Records a join outcome so the caller can report it after the store releases its lock.
+		 *
+		 * @param status the operation's outcome
+		 * @param joinedCandidateKey the member added to the roster, or {@code null} on failure
+		 */
+		public JoinResult(final JoinStatus status, final String joinedCandidateKey)
+		{
+			this.status = status;
+			this.joinedCandidateKey = joinedCandidateKey;
+		}
+
+		/**
+		 * Returns the outcome for choosing a player message.
+		 *
+		 * @return the join status
+		 */
+		public JoinStatus getStatus()
+		{
+			return status;
+		}
+
+		/**
+		 * Identifies the candidate for an online notification after approval.
+		 *
+		 * @return the new member's key, or {@code null} if no one joined
+		 */
+		public String getJoinedCandidateKey()
+		{
+			return joinedCandidateKey;
 		}
 	}
 

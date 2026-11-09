@@ -11,9 +11,9 @@ import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.CMProps;
 import com.planet_ink.coffee_mud.core.CMStrings;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
-import com.planet_ink.coffee_mud.core.party.PartyInvitation;
+import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyStore;
-import com.planet_ink.coffee_mud.core.party.PartyStore.InviteResult;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 
 /** Handles live players and feedback around the party store's membership rules. */
@@ -109,13 +109,13 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			return;
 		}
 
-		final InviteResult result = currentStore.invite(senderKey, characterKey(recipient));
+		final PendingResult result = currentStore.invite(senderKey, characterKey(recipient));
 		switch(result.getStatus())
 		{
 		case CREATED:
 		{
 			// Notify the recipient after the store commits the invite.
-			final String id = Long.toString(result.getInvitation().getId());
+			final String id = Long.toString(result.getEntry().getId());
 			sender.tell(L("You invited @x1 to your party. Invitation ID is @x2.", recipient.Name(), id));
 			recipient.tell(L("@x1 invited you to their party. Use PARTY ACCEPT @x2 or PARTY PENDING.",
 					sender.Name(), id));
@@ -123,7 +123,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 		case ALREADY_PENDING:
 			sender.tell(L("Your invitation to @x1 is already pending. Invitation ID is @x2.",
-					recipient.Name(), Long.toString(result.getInvitation().getId())));
+					recipient.Name(), Long.toString(result.getEntry().getId())));
 			break;
 		case NOT_LEADER:
 			sender.tell(L("Only a party leader can send invitations."));
@@ -142,7 +142,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			return;
 
 		final Instant now = Instant.now();
-		final List<PartyInvitation> pending = store.pendingInvitations(characterKey(character));
+		final List<PartyPendingEntry> pending = store.pendingEntries(characterKey(character));
 		if(pending.isEmpty())
 		{
 			character.tell(L("You have no pending party invitations."));
@@ -150,12 +150,12 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 
 		// Round up so a live invite with less than a second left still shows time.
-		for(final PartyInvitation invite : pending)
+		for(final PartyPendingEntry invite : pending)
 		{
 			final Duration remaining = Duration.between(now, invite.getExpiresAt());
 			final long seconds = Math.max(0, remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1));
 			character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3.",
-					invite.getInviterKey(), Long.toString(seconds), Long.toString(invite.getId())));
+					invite.getSenderKey(), Long.toString(seconds), Long.toString(invite.getId())));
 		}
 
 		if(character.isInCombat())
@@ -169,7 +169,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		if(!canChangeInvitations(character))
 			return;
 
-		switch(store.acceptInvitation(characterKey(character), invitationId))
+		switch(store.acceptInvitation(characterKey(character), invitationId).getStatus())
 		{
 		case JOINED:
 			character.tell(L("You joined the party. Use PARTY to see the roster."));
@@ -177,7 +177,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		case ALREADY_MEMBER:
 			character.tell(L("You already belong to a party. Use PARTY LEAVE before joining another."));
 			break;
-		case INVITATION_UNAVAILABLE:
+		case ENTRY_UNAVAILABLE:
 			character.tell(L("That invitation is unavailable. Use PARTY PENDING to see your invitations."));
 			break;
 		case EXPIRED:
@@ -245,7 +245,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 		// Fall back to the standard limits when a setting is absent or invalid.
 		final Duration lifetime = configuredSeconds > 0
-				? Duration.ofSeconds(configuredSeconds) : InMemoryPartyStore.DEFAULT_INVITATION_LIFETIME;
+				? Duration.ofSeconds(configuredSeconds) : InMemoryPartyStore.DEFAULT_PENDING_LIFETIME;
 		final int memberLimit = configuredLimit > 0 ? configuredLimit : InMemoryPartyStore.DEFAULT_MEMBER_LIMIT;
 		store = new InMemoryPartyStore(Instant::now, lifetime, memberLimit);
 		return super.activate();

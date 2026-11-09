@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -14,12 +15,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
-import com.planet_ink.coffee_mud.core.party.PartyInvitation;
+import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyStore;
-import com.planet_ink.coffee_mud.core.party.PartyStore.AcceptResult;
-import com.planet_ink.coffee_mud.core.party.PartyStore.InviteResult;
-import com.planet_ink.coffee_mud.core.party.PartyStore.InviteStatus;
+import com.planet_ink.coffee_mud.core.party.PartyStore.JoinStatus;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
 
 /**
  * Checks invitation and roster rules through the party store API.
@@ -113,35 +114,35 @@ public class PartyInvitationTest extends StdTest
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
 		final PartyStore store = new InMemoryPartyStore(now::get, Duration.ofMinutes(2), 6);
 		final PartySnapshot original = store.create("Alice");
-		check(store.invite("Carol", "Bob").getStatus() == InviteStatus.NOT_LEADER,
+		check(store.invite("Carol", "Bob").getStatus() == PendingStatus.NOT_LEADER,
 				"A character without a party cannot invite someone.");
 
 		// Sending an invite gives Bob a choice and leaves the roster alone.
-		final PartyInvitation invite = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry invite = sendInvite(store, "Alice", "Bob");
 		check(store.findByMember("Bob") == null, "An invite alone must not join Bob.");
-		check(store.pendingInvitations("Carol").isEmpty(), "Carol must not see Bob's invite.");
-		check(store.acceptInvitation("Carol", invite.getId()) == AcceptResult.INVITATION_UNAVAILABLE,
+		check(store.pendingEntries("Carol").isEmpty(), "Carol must not see Bob's invite.");
+		check(store.acceptInvitation("Carol", invite.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"Carol must not be able to accept Bob's invite.");
 
 		// Repeating the invite keeps the same ID and deadline.
 		now.set(Instant.EPOCH.plusSeconds(30));
-		final InviteResult repeat = store.invite("Alice", "Bob");
-		check(repeat.getStatus() == InviteStatus.ALREADY_PENDING, "A duplicate should find the first invite.");
-		check(repeat.getInvitation().getId() == invite.getId(), "A duplicate must keep the original ID.");
-		check(repeat.getInvitation().getExpiresAt().equals(invite.getExpiresAt()),
+		final PendingResult repeat = store.invite("Alice", "Bob");
+		check(repeat.getStatus() == PendingStatus.ALREADY_PENDING, "A duplicate should find the first invite.");
+		check(repeat.getEntry().getId() == invite.getId(), "A duplicate must keep the original ID.");
+		check(repeat.getEntry().getExpiresAt().equals(invite.getExpiresAt()),
 				"A duplicate must keep the original deadline.");
-		check(store.pendingInvitations("Bob").size() == 1, "Bob should have one invite to the party.");
+		check(store.pendingEntries("Bob").size() == 1, "Bob should have one invite to the party.");
 
 		// The new roster is shared and earlier snapshots remain readable.
-		check(store.acceptInvitation("Bob", invite.getId()) == AcceptResult.JOINED, "Bob can accept his invite.");
+		check(store.acceptInvitation("Bob", invite.getId()).getStatus() == JoinStatus.JOINED, "Bob can accept his invite.");
 		final PartySnapshot joined = store.findByMember("Bob");
 		check(joined.getId() == original.getId(), "Bob should join Alice's existing party.");
 		check(joined.getMembers().equals(Arrays.asList("Alice", "Bob")), "Bob should be appended in join order.");
 		check(store.findByMember("Alice").getMembers().equals(joined.getMembers()), "Both members should see one roster.");
 		check(original.getMembers().equals(Collections.singletonList("Alice")), "The earlier roster should stay fixed.");
-		check(store.invite("Bob", "Carol").getStatus() == InviteStatus.NOT_LEADER,
+		check(store.invite("Bob", "Carol").getStatus() == PendingStatus.NOT_LEADER,
 				"A member who is not leader cannot invite someone.");
-		check(store.invite("Alice", "Bob").getStatus() == InviteStatus.ALREADY_MEMBER,
+		check(store.invite("Alice", "Bob").getStatus() == PendingStatus.ALREADY_MEMBER,
 				"An existing member does not need another invitation.");
 	}
 
@@ -151,29 +152,29 @@ public class PartyInvitationTest extends StdTest
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
 		final PartyStore store = new InMemoryPartyStore(now::get, Duration.ofSeconds(10), 6);
 		store.create("Alice");
-		final PartyInvitation bob = sendInvite(store, "Alice", "Bob");
-		final PartyInvitation carol = sendInvite(store, "Alice", "Carol");
-		final PartyInvitation dave = sendInvite(store, "Alice", "Dave");
+		final PartyPendingEntry bob = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry carol = sendInvite(store, "Alice", "Carol");
+		final PartyPendingEntry dave = sendInvite(store, "Alice", "Dave");
 		final Instant deadline = Instant.EPOCH.plusSeconds(10);
 		check(bob.getExpiresAt().equals(deadline), "The store should use the configured invite lifetime.");
 
 		// Advance time without waiting or changing the deadlines already issued.
 		now.set(deadline.minusNanos(1));
-		check(store.acceptInvitation("Bob", bob.getId()) == AcceptResult.JOINED, "Bob can accept before the deadline.");
+		check(store.acceptInvitation("Bob", bob.getId()).getStatus() == JoinStatus.JOINED, "Bob can accept before the deadline.");
 		now.set(deadline);
-		check(store.acceptInvitation("Carol", carol.getId()) == AcceptResult.EXPIRED, "The deadline itself is expired.");
+		check(store.acceptInvitation("Carol", carol.getId()).getStatus() == JoinStatus.EXPIRED, "The deadline itself is expired.");
 		now.set(deadline.plusNanos(1));
-		check(store.acceptInvitation("Dave", dave.getId()) == AcceptResult.EXPIRED, "An overdue invite must fail.");
+		check(store.acceptInvitation("Dave", dave.getId()).getStatus() == JoinStatus.EXPIRED, "An overdue invite must fail.");
 		check(store.findByMember("Carol") == null && store.findByMember("Dave") == null,
 				"Expired invites must leave both characters without membership.");
 
 		// A new invite has a fresh ID, and the old one cannot be used again.
-		final PartyInvitation replacement = sendInvite(store, "Alice", "Carol");
+		final PartyPendingEntry replacement = sendInvite(store, "Alice", "Carol");
 		check(replacement.getId() != carol.getId(), "A new invite must get a new ID.");
-		check(store.acceptInvitation("Carol", carol.getId()) == AcceptResult.INVITATION_UNAVAILABLE,
+		check(store.acceptInvitation("Carol", carol.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"The expired ID must not select the replacement invite.");
 		now.set(replacement.getExpiresAt());
-		check(store.pendingInvitations("Carol").isEmpty(), "Pending should hide an invite at its deadline.");
+		check(store.pendingEntries("Carol").isEmpty(), "Pending should hide an invite at its deadline.");
 	}
 
 	/** Checks the default size limit and a retry after a member leaves. */
@@ -183,23 +184,23 @@ public class PartyInvitationTest extends StdTest
 		store.create("Alice");
 
 		// Hold the seventh player's invite while the other seats fill up.
-		final PartyInvitation waitlisted = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry waitlisted = sendInvite(store, "Alice", "Bob");
 		for(int seat = 2; seat <= 6; seat++)
 		{
 			final String member = "Member" + seat;
-			final PartyInvitation invite = sendInvite(store, "Alice", member);
-			check(store.acceptInvitation(member, invite.getId()) == AcceptResult.JOINED, "An open seat should be available.");
+			final PartyPendingEntry invite = sendInvite(store, "Alice", member);
+			check(store.acceptInvitation(member, invite.getId()).getStatus() == JoinStatus.JOINED, "An open seat should be available.");
 		}
 		check(store.findByMember("Alice").getMembers().size() == 6, "The limit should count the leader and five members.");
-		check(store.acceptInvitation("Bob", waitlisted.getId()) == AcceptResult.PARTY_FULL, "The seventh player must wait.");
+		check(store.acceptInvitation("Bob", waitlisted.getId()).getStatus() == JoinStatus.PARTY_FULL, "The seventh player must wait.");
 		check(store.findByMember("Bob") == null, "A full party must leave Bob without membership.");
 
 		// A full-party rejection leaves the original invitation available.
-		final List<PartyInvitation> pending = store.pendingInvitations("Bob");
+		final List<PartyPendingEntry> pending = store.pendingEntries("Bob");
 		check(pending.size() == 1 && pending.get(0).getExpiresAt().equals(waitlisted.getExpiresAt()),
 				"A full-party rejection must keep the original deadline.");
 		check(store.leave("Member2"), "A member should be able to free a seat.");
-		check(store.acceptInvitation("Bob", waitlisted.getId()) == AcceptResult.JOINED,
+		check(store.acceptInvitation("Bob", waitlisted.getId()).getStatus() == JoinStatus.JOINED,
 				"Bob can use the same invite once a seat opens.");
 	}
 
@@ -208,11 +209,11 @@ public class PartyInvitationTest extends StdTest
 	{
 		final PartyStore store = new InMemoryPartyStore();
 		final PartySnapshot original = store.create("Alice");
-		final PartyInvitation bob = sendInvite(store, "Alice", "Bob");
-		final PartyInvitation carol = sendInvite(store, "Alice", "Carol");
-		final PartyInvitation dave = sendInvite(store, "Alice", "Dave");
-		check(store.acceptInvitation("Bob", bob.getId()) == AcceptResult.JOINED, "Bob joins first.");
-		check(store.acceptInvitation("Carol", carol.getId()) == AcceptResult.JOINED, "Carol joins second.");
+		final PartyPendingEntry bob = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry carol = sendInvite(store, "Alice", "Carol");
+		final PartyPendingEntry dave = sendInvite(store, "Alice", "Dave");
+		check(store.acceptInvitation("Bob", bob.getId()).getStatus() == JoinStatus.JOINED, "Bob joins first.");
+		check(store.acceptInvitation("Carol", carol.getId()).getStatus() == JoinStatus.JOINED, "Carol joins second.");
 
 		// The earliest remaining member takes over the existing party.
 		check(store.leave("Alice"), "Alice should be able to leave the party.");
@@ -223,13 +224,13 @@ public class PartyInvitationTest extends StdTest
 		check(remaining.getMembers().equals(Arrays.asList("Bob", "Carol")), "The roster should keep the surviving join order.");
 
 		// A repeat invite from the new leader should keep the original offer.
-		final InviteResult repeat = store.invite("Bob", "Dave");
-		check(repeat.getStatus() == InviteStatus.ALREADY_PENDING, "Dave's invitation should survive succession.");
-		check(repeat.getInvitation().getId() == dave.getId()
-				&& repeat.getInvitation().getExpiresAt().equals(dave.getExpiresAt()),
+		final PendingResult repeat = store.invite("Bob", "Dave");
+		check(repeat.getStatus() == PendingStatus.ALREADY_PENDING, "Dave's invitation should survive succession.");
+		check(repeat.getEntry().getId() == dave.getId()
+				&& repeat.getEntry().getExpiresAt().equals(dave.getExpiresAt()),
 				"The new leader should see the original invite ID and deadline.");
-		check("Alice".equals(repeat.getInvitation().getInviterKey()), "The invite should still identify its original sender.");
-		check(store.acceptInvitation("Dave", dave.getId()) == AcceptResult.JOINED,
+		check("Alice".equals(repeat.getEntry().getSenderKey()), "The invite should still identify its original sender.");
+		check(store.acceptInvitation("Dave", dave.getId()).getStatus() == JoinStatus.JOINED,
 				"Dave can accept an invite that the old leader sent.");
 		check(store.leave("Carol") && "Bob".equals(store.findByMember("Dave").getLeader()),
 				"A non-leader leaving should keep the current leader.");
@@ -240,17 +241,17 @@ public class PartyInvitationTest extends StdTest
 	{
 		final PartyStore store = new InMemoryPartyStore();
 		final PartySnapshot original = store.create("Alice");
-		final PartyInvitation oldInvite = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry oldInvite = sendInvite(store, "Alice", "Bob");
 		check(store.leave("Alice"), "The only member should be able to leave.");
-		check(store.pendingInvitations("Bob").isEmpty(), "Removing the party should retire its invite.");
+		check(store.pendingEntries("Bob").isEmpty(), "Removing the party should retire its invite.");
 
 		final PartySnapshot replacement = store.create("Alice");
-		final PartyInvitation newInvite = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry newInvite = sendInvite(store, "Alice", "Bob");
 		check(replacement.getId() != original.getId(), "A recreated party should get a new ID.");
 		check(newInvite.getId() != oldInvite.getId(), "An invite ID should never be reused in this store.");
-		check(store.acceptInvitation("Bob", oldInvite.getId()) == AcceptResult.INVITATION_UNAVAILABLE,
+		check(store.acceptInvitation("Bob", oldInvite.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"The old ID cannot admit Bob to the recreated party.");
-		check(store.acceptInvitation("Bob", newInvite.getId()) == AcceptResult.JOINED, "The new invite should work.");
+		check(store.acceptInvitation("Bob", newInvite.getId()).getStatus() == JoinStatus.JOINED, "The new invite should work.");
 	}
 
 	/** Checks that membership cancels other invites even after the member later leaves. */
@@ -259,23 +260,23 @@ public class PartyInvitationTest extends StdTest
 		final PartyStore store = new InMemoryPartyStore();
 		store.create("Alice");
 		store.create("Carol");
-		final PartyInvitation first = sendInvite(store, "Alice", "Bob");
-		final PartyInvitation competing = sendInvite(store, "Carol", "Bob");
-		check(store.pendingInvitations("Bob").equals(Arrays.asList(first, competing)),
+		final PartyPendingEntry first = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry competing = sendInvite(store, "Carol", "Bob");
+		check(store.pendingEntries("Bob").equals(Arrays.asList(first, competing)),
 				"Bob should see both invites in the order they were sent.");
 
-		check(store.acceptInvitation("Bob", first.getId()) == AcceptResult.JOINED, "Bob can choose Alice's party.");
-		check(store.pendingInvitations("Bob").isEmpty(), "Joining should clear both incoming invites.");
+		check(store.acceptInvitation("Bob", first.getId()).getStatus() == JoinStatus.JOINED, "Bob can choose Alice's party.");
+		check(store.pendingEntries("Bob").isEmpty(), "Joining should clear both incoming invites.");
 		check(store.leave("Bob"), "Bob should be able to leave Alice's party.");
-		check(store.acceptInvitation("Bob", competing.getId()) == AcceptResult.INVITATION_UNAVAILABLE,
+		check(store.acceptInvitation("Bob", competing.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"Leaving must not restore Carol's invite.");
 
 		// Creating a party must also retire invitations from other parties.
-		final PartyInvitation beforeCreate = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry beforeCreate = sendInvite(store, "Alice", "Bob");
 		check(store.create("Bob") != null, "Bob can create a party while invited elsewhere.");
-		check(store.pendingInvitations("Bob").isEmpty(), "Creating should clear incoming invites.");
+		check(store.pendingEntries("Bob").isEmpty(), "Creating should clear incoming invites.");
 		check(store.leave("Bob"), "Bob should be able to leave his own party.");
-		check(store.acceptInvitation("Bob", beforeCreate.getId()) == AcceptResult.INVITATION_UNAVAILABLE,
+		check(store.acceptInvitation("Bob", beforeCreate.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE,
 				"Leaving must not restore an invite retired by creation.");
 	}
 
@@ -288,12 +289,12 @@ public class PartyInvitationTest extends StdTest
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 2);
 		store.create("Alice");
-		final PartyInvitation bob = sendInvite(store, "Alice", "Bob");
-		final PartyInvitation carol = sendInvite(store, "Alice", "Carol");
+		final PartyPendingEntry bob = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry carol = sendInvite(store, "Alice", "Carol");
 
-		final List<AcceptResult> results = acceptTogether(store, bob, carol);
-		check(Collections.frequency(results, AcceptResult.JOINED) == 1, "Only one character can take the last seat.");
-		check(Collections.frequency(results, AcceptResult.PARTY_FULL) == 1, "The other character should see a full party.");
+		final List<JoinStatus> results = acceptTogether(store, bob, carol);
+		check(Collections.frequency(results, JoinStatus.JOINED) == 1, "Only one character can take the last seat.");
+		check(Collections.frequency(results, JoinStatus.PARTY_FULL) == 1, "The other character should see a full party.");
 		check(store.findByMember("Alice").getMembers().size() == 2, "The party must stay within its limit.");
 		check((store.findByMember("Bob") == null) != (store.findByMember("Carol") == null),
 				"The member lookup must include only the winner.");
@@ -309,16 +310,16 @@ public class PartyInvitationTest extends StdTest
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
 		store.create("Alice");
 		store.create("Carol");
-		final PartyInvitation first = sendInvite(store, "Alice", "Bob");
-		final PartyInvitation second = sendInvite(store, "Carol", "Bob");
+		final PartyPendingEntry first = sendInvite(store, "Alice", "Bob");
+		final PartyPendingEntry second = sendInvite(store, "Carol", "Bob");
 
-		final List<AcceptResult> results = acceptTogether(store, first, second);
-		check(Collections.frequency(results, AcceptResult.JOINED) == 1, "Bob must join exactly one party.");
-		check(Collections.frequency(results, AcceptResult.ALREADY_MEMBER) == 1, "Bob must have one membership.");
+		final List<JoinStatus> results = acceptTogether(store, first, second);
+		check(Collections.frequency(results, JoinStatus.JOINED) == 1, "Bob must join exactly one party.");
+		check(Collections.frequency(results, JoinStatus.ALREADY_MEMBER) == 1, "Bob must have one membership.");
 		final int totalMembers = store.findByMember("Alice").getMembers().size()
 				+ store.findByMember("Carol").getMembers().size();
 		check(totalMembers == 3, "Only one roster should gain Bob.");
-		check(store.pendingInvitations("Bob").isEmpty(), "The successful join should retire both invites.");
+		check(store.pendingEntries("Bob").isEmpty(), "The successful join should retire both invites.");
 	}
 
 	/**
@@ -329,12 +330,12 @@ public class PartyInvitationTest extends StdTest
 	 * @param recipient the invited character
 	 * @return the invitation created by the store
 	 */
-	private static PartyInvitation sendInvite(final PartyStore store, final String leader, final String recipient)
+	private static PartyPendingEntry sendInvite(final PartyStore store, final String leader, final String recipient)
 	{
-		final InviteResult result = store.invite(leader, recipient);
-		check(result.getStatus() == InviteStatus.CREATED && result.getInvitation() != null,
+		final PendingResult result = store.invite(leader, recipient);
+		check(result.getStatus() == PendingStatus.CREATED && result.getEntry() != null,
 				"Expected " + leader + " to invite " + recipient + ", got " + result.getStatus() + ".");
-		return result.getInvitation();
+		return result.getEntry();
 	}
 
 	/**
@@ -346,21 +347,37 @@ public class PartyInvitationTest extends StdTest
 	 * @return outcomes in the same order as the invitations
 	 * @throws Exception if a worker fails, times out, or is interrupted
 	 */
-	private static List<AcceptResult> acceptTogether(final PartyStore store, final PartyInvitation first,
-			final PartyInvitation second) throws Exception
+	private static List<JoinStatus> acceptTogether(final PartyStore store, final PartyPendingEntry first,
+			final PartyPendingEntry second) throws Exception
+	{
+		return runTogether(
+				() -> store.acceptInvitation(first.getCandidateKey(), first.getId()).getStatus(),
+				() -> store.acceptInvitation(second.getCandidateKey(), second.getId()).getStatus());
+	}
+
+	/**
+	 * Releases two party store operations together. Each worker must reach the barrier
+	 * before either can try its operation. Both the barrier and results have time limits.
+	 *
+	 * @param <T> the result type shared by the operations
+	 * @param first the operation for the first worker
+	 * @param second the operation for the second worker
+	 * @return outcomes in the same order as the operations
+	 * @throws Exception if a worker fails, times out, or is interrupted
+	 */
+	static <T> List<T> runTogether(final Callable<T> first, final Callable<T> second) throws Exception
 	{
 		final ExecutorService workers = Executors.newFixedThreadPool(2);
 		final CyclicBarrier start = new CyclicBarrier(2);
 		try
 		{
-			// Both workers must arrive before either attempts to join.
-			final Future<AcceptResult> firstResult = workers.submit(() -> {
+			final Future<T> firstResult = workers.submit(() -> {
 				start.await(5, TimeUnit.SECONDS);
-				return store.acceptInvitation(first.getRecipientKey(), first.getId());
+				return first.call();
 			});
-			final Future<AcceptResult> secondResult = workers.submit(() -> {
+			final Future<T> secondResult = workers.submit(() -> {
 				start.await(5, TimeUnit.SECONDS);
-				return store.acceptInvitation(second.getRecipientKey(), second.getId());
+				return second.call();
 			});
 			return Arrays.asList(firstResult.get(10, TimeUnit.SECONDS), secondResult.get(10, TimeUnit.SECONDS));
 		}

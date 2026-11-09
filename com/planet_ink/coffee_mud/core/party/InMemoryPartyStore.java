@@ -11,23 +11,25 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
+
 /**
- * Keeps party rosters and invitations for the current server run.
- * One store lock protects the roster, member lookup, and invitation state.
+ * Keeps party rosters and pending entries for the current server run.
+ * One store lock protects the roster, member lookup, and pending state.
  */
 public final class InMemoryPartyStore implements PartyStore
 {
-	/** The usual time allowed to accept an invitation. */
-	public static final Duration DEFAULT_INVITATION_LIFETIME = Duration.ofMinutes(2);
+	/** The usual time allowed to accept an invitation or approve a request. */
+	public static final Duration DEFAULT_PENDING_LIFETIME = Duration.ofMinutes(2);
 
 	/** The usual number of members, including the leader. */
 	public static final int DEFAULT_MEMBER_LIMIT = 6;
 
-	/** The clock used to issue and check invitation deadlines. */
+	/** The clock used to issue and check deadlines. */
 	private final Supplier<Instant> clock;
 
-	/** How long a new invitation stays open. */
-	private final Duration invitationLifetime;
+	/** How long a new pending entry stays open. */
+	private final Duration pendingLifetime;
 
 	/** The maximum number of members in a party. */
 	private final int memberLimit;
@@ -38,40 +40,40 @@ public final class InMemoryPartyStore implements PartyStore
 	/** The party ID for each character who belongs to a party. */
 	private final Map<String, Long> partyIdsByMember = new HashMap<String, Long>();
 
-	/** Invitations that have not been retired, in the order they were sent. */
-	private final Map<Long, PartyInvitation> invitationsById = new LinkedHashMap<Long, PartyInvitation>();
+	/** Entries that have not been retired, in the order they were opened. */
+	private final Map<Long, PartyPendingEntry> entriesById = new LinkedHashMap<Long, PartyPendingEntry>();
 
 	/** The next party ID to assign. A recreated party gets a new ID. */
 	private long nextPartyId = 1;
 
-	/** The next invitation ID. Retiring an invite does not free its ID for reuse. */
-	private long nextInvitationId = 1;
+	/** The next pending ID. Retiring an entry does not free its ID for reuse. */
+	private long nextEntryId = 1;
 
 	/** Creates a store with the server clock and the default deadline and capacity. */
 	public InMemoryPartyStore()
 	{
-		this(Instant::now, DEFAULT_INVITATION_LIFETIME, DEFAULT_MEMBER_LIMIT);
+		this(Instant::now, DEFAULT_PENDING_LIFETIME, DEFAULT_MEMBER_LIMIT);
 	}
 
 	/**
-	 * Creates an empty store with the given invitation lifetime and party size.
+	 * Creates an empty store with the given pending lifetime and party size.
 	 * Tests can supply a clock they control to check deadlines without waiting.
 	 *
 	 * @param clock supplies the current time while the store lock is held
-	 * @param invitationLifetime how long each new invitation stays open
+	 * @param pendingLifetime how long each new entry stays open
 	 * @param memberLimit the maximum number of members, including the leader
 	 * @throws IllegalArgumentException if the lifetime or member limit is not positive
 	 * @throws NullPointerException if the clock or lifetime is null
 	 */
-	public InMemoryPartyStore(final Supplier<Instant> clock, final Duration invitationLifetime,
+	public InMemoryPartyStore(final Supplier<Instant> clock, final Duration pendingLifetime,
 			final int memberLimit)
 	{
 		this.clock = Objects.requireNonNull(clock);
-		this.invitationLifetime = Objects.requireNonNull(invitationLifetime);
+		this.pendingLifetime = Objects.requireNonNull(pendingLifetime);
 
-		// Every invitation needs a deadline and every party needs room for its leader.
-		if(invitationLifetime.isZero() || invitationLifetime.isNegative())
-			throw new IllegalArgumentException("Invitation lifetime must be positive.");
+		// Every entry needs a deadline and every party needs room for its leader.
+		if(pendingLifetime.isZero() || pendingLifetime.isNegative())
+			throw new IllegalArgumentException("Pending lifetime must be positive.");
 		if(memberLimit < 1)
 			throw new IllegalArgumentException("Party member limit must be positive.");
 		this.memberLimit = memberLimit;
@@ -98,7 +100,7 @@ public final class InMemoryPartyStore implements PartyStore
 				Collections.singletonList(characterKey));
 		partiesById.put(partyId, party);
 		partyIdsByMember.put(characterKey, partyId);
-		clearIncomingInvitations(characterKey);
+		clearCandidateEntries(characterKey);
 		return party;
 	}
 
@@ -119,8 +121,8 @@ public final class InMemoryPartyStore implements PartyStore
 
 	/**
 	 * Removes the character and updates the roster under the store lock.
-	 * An empty party is removed along with its invitations. A party that stays
-	 * open keeps its invitations, even if another member becomes leader.
+	 * An empty party is removed along with its pending entries. A party that
+	 * stays open keeps its entries, even if another member becomes leader.
 	 *
 	 * @param characterKey the stable character key
 	 * @return {@code true} if the character left a party
@@ -139,9 +141,9 @@ public final class InMemoryPartyStore implements PartyStore
 
 		if(remaining.isEmpty())
 		{
-			// Retire the party and every invite that could send someone to it.
+			// Retire the party and every entry that could send someone to it.
 			partiesById.remove(partyId);
-			invitationsById.values().removeIf(invite -> invite.getPartyId() == partyId.longValue());
+			entriesById.values().removeIf(entry -> entry.getPartyId() == partyId.longValue());
 		}
 		else
 		{
@@ -155,127 +157,190 @@ public final class InMemoryPartyStore implements PartyStore
 	}
 
 	/**
-	 * Checks the sender's authority and creates or finds an invitation under one lock.
-	 * An invitation can be sent while the party is full because seats are checked at acceptance.
+	 * {@inheritDoc}
+	 * Checks and opens the entry under the store lock. A full party can still receive pending entries.
 	 *
-	 * @param leaderKey the character sending the invitation
-	 * @param recipientKey the character being invited
-	 * @return the outcome and any new or existing invitation
 	 * @throws NullPointerException if either character key is null
 	 */
 	@Override
-	public synchronized InviteResult invite(final String leaderKey, final String recipientKey)
+	public synchronized PendingResult invite(final String leaderKey, final String recipientKey)
 	{
-		Objects.requireNonNull(recipientKey);
-		final PartySnapshot party = findByMember(leaderKey);
-		if((party == null) || !leaderKey.equals(party.getLeader()))
-			return new InviteResult(InviteStatus.NOT_LEADER, null);
-		if(partyIdsByMember.containsKey(recipientKey))
-			return new InviteResult(InviteStatus.ALREADY_MEMBER, null);
-
-		// Keep the first live invite for this party and recipient.
-		final Instant now = clock.get();
-		removeExpiredInvitations(now);
-		for(final PartyInvitation invite : invitationsById.values())
-		{
-			if((invite.getPartyId() == party.getId()) && recipientKey.equals(invite.getRecipientKey()))
-				return new InviteResult(InviteStatus.ALREADY_PENDING, invite);
-		}
-
-		final long id = nextInvitationId++;
-		final PartyInvitation invite = new PartyInvitation(id, party.getId(), leaderKey, recipientKey,
-				now.plus(invitationLifetime));
-		invitationsById.put(Long.valueOf(id), invite);
-		return new InviteResult(InviteStatus.CREATED, invite);
+		return openEntry(leaderKey, recipientKey, Type.INVITATION);
 	}
 
 	/**
-	 * Removes expired records and copies the character's remaining invitations.
+	 * {@inheritDoc}
+	 * Uses the same store lock and deadline rules as invitations.
+	 *
+	 * @throws NullPointerException if either character key is null
+	 */
+	@Override
+	public synchronized PendingResult requestJoin(final String candidateKey, final String leaderKey)
+	{
+		return openEntry(leaderKey, candidateKey, Type.REQUEST);
+	}
+
+	/**
+	 * Checks the party and candidate before opening a pending entry.
+	 * Call this while holding the store lock so two starts cannot create separate entries.
+	 *
+	 * @param leaderKey the leader supplied by the caller
+	 * @param candidateKey the character who would join
+	 * @param type whether the leader or candidate started the entry
+	 * @return the outcome and any new or existing entry
+	 * @throws NullPointerException if either character key is null
+	 */
+	private PendingResult openEntry(final String leaderKey, final String candidateKey, final Type type)
+	{
+		Objects.requireNonNull(candidateKey);
+		final PartySnapshot party = findByMember(leaderKey);
+		if((party == null) || !leaderKey.equals(party.getLeader()))
+			return new PendingResult(PendingStatus.NOT_LEADER, null);
+		if(partyIdsByMember.containsKey(candidateKey))
+			return new PendingResult(PendingStatus.ALREADY_MEMBER, null);
+
+		// Keep the first live entry even when the two sides used different commands.
+		final Instant now = clock.get();
+		removeExpiredEntries(now);
+		for(final PartyPendingEntry entry : entriesById.values())
+		{
+			if((entry.getPartyId() == party.getId()) && candidateKey.equals(entry.getCandidateKey()))
+				return new PendingResult(PendingStatus.ALREADY_PENDING, entry);
+		}
+
+		final String senderKey = type == Type.INVITATION ? leaderKey : candidateKey;
+		final PartyPendingEntry entry = new PartyPendingEntry(nextEntryId++, party.getId(), type,
+				senderKey, candidateKey, now.plus(pendingLifetime));
+		entriesById.put(Long.valueOf(entry.getId()), entry);
+		return new PendingResult(PendingStatus.CREATED, entry);
+	}
+
+	/**
+	 * Removes expired records and copies the entries this character can act on.
 	 * The returned list can be read after the store lock is released.
 	 *
-	 * @param characterKey the invited character
-	 * @return an immutable list in invitation order
+	 * @param characterKey the character looking up their entries
+	 * @return an immutable list in creation order
 	 * @throws NullPointerException if the character key is null
 	 */
 	@Override
-	public synchronized List<PartyInvitation> pendingInvitations(final String characterKey)
+	public synchronized List<PartyPendingEntry> pendingEntries(final String characterKey)
 	{
 		Objects.requireNonNull(characterKey);
-		removeExpiredInvitations(clock.get());
+		removeExpiredEntries(clock.get());
 
-		final List<PartyInvitation> pending = new ArrayList<PartyInvitation>();
-		for(final PartyInvitation invite : invitationsById.values())
+		final List<PartyPendingEntry> pending = new ArrayList<PartyPendingEntry>();
+		for(final PartyPendingEntry entry : entriesById.values())
 		{
-			if(characterKey.equals(invite.getRecipientKey()))
-				pending.add(invite);
+			final PartySnapshot party = partiesById.get(Long.valueOf(entry.getPartyId()));
+			if((party != null) && canComplete(characterKey, entry, party))
+				pending.add(entry);
 		}
 		return Collections.unmodifiableList(pending);
 	}
 
 	/**
-	 * Checks membership, recipient, deadline, and capacity under one lock.
-	 * On success the roster and member lookup are updated together and the
-	 * character's pending invitations are cleared. A full party leaves the invite open.
+	 * {@inheritDoc}
+	 * The current membership check also covers retries after a successful acceptance.
 	 *
-	 * @param characterKey the character accepting the invitation
-	 * @param invitationId the invitation to accept
-	 * @return the outcome of the attempt
 	 * @throws NullPointerException if the character key is null
 	 */
 	@Override
-	public synchronized AcceptResult acceptInvitation(final String characterKey, final long invitationId)
+	public synchronized JoinResult acceptInvitation(final String characterKey, final long invitationId)
 	{
 		Objects.requireNonNull(characterKey);
 		if(partyIdsByMember.containsKey(characterKey))
-			return AcceptResult.ALREADY_MEMBER;
-
-		// Check the recipient before changing the invitation, even if it has expired.
-		final Long inviteId = Long.valueOf(invitationId);
-		final PartyInvitation invite = invitationsById.get(inviteId);
-		if((invite == null) || !characterKey.equals(invite.getRecipientKey()))
-			return AcceptResult.INVITATION_UNAVAILABLE;
-		if(invite.isExpired(clock.get()))
-		{
-			invitationsById.remove(inviteId);
-			return AcceptResult.EXPIRED;
-		}
-
-		// Check the current roster so competing acceptances cannot overfill it.
-		final Long partyId = Long.valueOf(invite.getPartyId());
-		final PartySnapshot party = partiesById.get(partyId);
-		if(party == null)
-			return AcceptResult.INVITATION_UNAVAILABLE;
-		if(party.getMembers().size() >= memberLimit)
-			return AcceptResult.PARTY_FULL;
-
-		// Publish the new roster and retire every invite this character could use.
-		final List<String> members = new ArrayList<String>(party.getMembers());
-		members.add(characterKey);
-		partiesById.put(partyId, new PartySnapshot(party.getId(), party.getLeader(), members));
-		partyIdsByMember.put(characterKey, partyId);
-		clearIncomingInvitations(characterKey);
-		return AcceptResult.JOINED;
+			return new JoinResult(JoinStatus.ALREADY_MEMBER, null);
+		return join(characterKey, invitationId, Type.INVITATION);
 	}
 
 	/**
-	 * Retires every invitation with a deadline at or before the given time.
+	 * {@inheritDoc}
+	 * Checks authority against the current roster under the store lock.
+	 *
+	 * @throws NullPointerException if the leader key is null
+	 */
+	@Override
+	public synchronized JoinResult approveRequest(final String leaderKey, final long requestId)
+	{
+		return join(Objects.requireNonNull(leaderKey), requestId, Type.REQUEST);
+	}
+
+	/**
+	 * Validates the entry and updates both membership lookups under the store lock.
+	 * On success all competing entries are retired. A full party leaves the entry open.
+	 *
+	 * @param actorKey the character acting on the entry
+	 * @param entryId the ID supplied by the actor
+	 * @param type the type accepted by the command
+	 * @return the outcome and the new member key on success
+	 */
+	private JoinResult join(final String actorKey, final long entryId, final Type type)
+	{
+		// Check authority before inspecting expiry so someone else's ID reveals no details.
+		final Long id = Long.valueOf(entryId);
+		final PartyPendingEntry entry = entriesById.get(id);
+		if((entry == null) || (entry.getType() != type))
+			return new JoinResult(JoinStatus.ENTRY_UNAVAILABLE, null);
+
+		final Long partyId = Long.valueOf(entry.getPartyId());
+		final PartySnapshot party = partiesById.get(partyId);
+		if((party == null) || !canComplete(actorKey, entry, party))
+			return new JoinResult(JoinStatus.ENTRY_UNAVAILABLE, null);
+		if(entry.isExpired(clock.get()))
+		{
+			entriesById.remove(id);
+			return new JoinResult(JoinStatus.EXPIRED, null);
+		}
+
+		// Check the current roster so competing acceptances cannot overfill it.
+		final String candidateKey = entry.getCandidateKey();
+		if(partyIdsByMember.containsKey(candidateKey))
+			return new JoinResult(JoinStatus.ALREADY_MEMBER, null);
+		if(party.getMembers().size() >= memberLimit)
+			return new JoinResult(JoinStatus.PARTY_FULL, null);
+
+		// Publish the new roster and retire every other attempt by the new member.
+		final List<String> members = new ArrayList<String>(party.getMembers());
+		members.add(candidateKey);
+		partiesById.put(partyId, new PartySnapshot(party.getId(), party.getLeader(), members));
+		partyIdsByMember.put(candidateKey, partyId);
+		clearCandidateEntries(candidateKey);
+		return new JoinResult(JoinStatus.JOINED, candidateKey);
+	}
+
+	/**
+	 * Checks which side can complete this entry using the current roster.
+	 *
+	 * @param characterKey the character checking or acting on the entry
+	 * @param entry the invitation or request
+	 * @param party the current roster of the party that owns the entry
+	 * @return whether the character can accept or approve this type of entry
+	 */
+	private boolean canComplete(final String characterKey, final PartyPendingEntry entry, final PartySnapshot party)
+	{
+		return characterKey.equals(entry.getType() == Type.INVITATION ? entry.getCandidateKey() : party.getLeader());
+	}
+
+	/**
+	 * Retires every entry with a deadline at or before the given time.
 	 * Call this while holding the store lock.
 	 *
 	 * @param now the current time for this operation
 	 */
-	private void removeExpiredInvitations(final Instant now)
+	private void removeExpiredEntries(final Instant now)
 	{
-		invitationsById.values().removeIf(invite -> invite.isExpired(now));
+		entriesById.values().removeIf(entry -> entry.isExpired(now));
 	}
 
 	/**
-	 * Retires a character's invitations after they create or join a party.
+	 * Retires a candidate's entries after they create or join a party.
 	 * Call this while holding the store lock.
 	 *
-	 * @param characterKey the character whose invites are no longer usable
+	 * @param characterKey the candidate whose entries are no longer usable
 	 */
-	private void clearIncomingInvitations(final String characterKey)
+	private void clearCandidateEntries(final String characterKey)
 	{
-		invitationsById.values().removeIf(invite -> characterKey.equals(invite.getRecipientKey()));
+		entriesById.values().removeIf(entry -> characterKey.equals(entry.getCandidateKey()));
 	}
 }
