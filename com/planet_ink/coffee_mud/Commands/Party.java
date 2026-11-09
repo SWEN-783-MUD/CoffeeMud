@@ -123,6 +123,9 @@ public class Party extends StdCommand
 		case "REQUEST":
 			parties.requestJoin(mob, argument);
 			break;
+		case "LEADER":
+			parties.transferLeadership(mob, argument);
+			break;
 		case "ACCEPT":
 		case "APPROVE":
 		case "DECLINE":
@@ -210,7 +213,7 @@ public class Party extends StdCommand
 	 */
 	private void showUsage(final MOB mob)
 	{
-		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY INVITE <name>, PARTY REQUEST <leader>, "
+		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY LEADER <name>, PARTY INVITE <name>, PARTY REQUEST <leader>, "
 				+ "PARTY PENDING, PARTY ACCEPT <id>, PARTY APPROVE <id>, PARTY DECLINE <id>, or PARTY CANCEL <id>. "
 				+ "Use HELP PARTY for details."));
 	}

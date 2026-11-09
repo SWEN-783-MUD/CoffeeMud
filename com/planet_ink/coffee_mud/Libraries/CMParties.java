@@ -83,6 +83,36 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		return isPlayerCharacter(character) && store.leave(characterKey(character));
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public void transferLeadership(final MOB leader, final String memberName)
+	{
+		if(!canManageParty(leader))
+			return;
+
+		// Match a roster key so a disconnected member can still take over.
+		final String memberKey = CMStrings.capitalizeAndLower(memberName);
+		switch(store.transferLeadership(characterKey(leader), memberKey))
+		{
+		case TRANSFERRED:
+			leader.tell(L("You passed party leadership to @x1.", memberKey));
+			final MOB newLeader = findOnlinePlayer(memberKey);
+			if(newLeader != null)
+				newLeader.tell(L("@x1 passed party leadership to you. Use PARTY PENDING to see pending entries.",
+						leader.Name()));
+			break;
+		case NOT_LEADER:
+			leader.tell(L("Only the current party leader can pass leadership."));
+			break;
+		case NOT_MEMBER:
+			leader.tell(L("@x1 is not in your party. Use PARTY to see the member names.", memberName));
+			break;
+		case ALREADY_LEADER:
+			leader.tell(L("You already lead the party."));
+			break;
+		}
+	}
+
 	/**
 	 * {@inheritDoc}
 	 * A repeat invite reports the existing ID to the sender. The recipient gets
@@ -370,7 +400,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 		if(character.isInCombat())
 		{
-			character.tell(L("Wait until combat ends before acting on party invitations or requests."));
+			character.tell(L("Wait until combat ends before using that party command."));
 			return false;
 		}
 		return true;

@@ -15,8 +15,10 @@ import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
 import com.planet_ink.coffee_mud.core.party.PartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyStore.JoinStatus;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
+import com.planet_ink.coffee_mud.core.party.PartyStore.TransferResult;
 
 /** Checks request authority, deadlines, and races through the same store as invitations. */
 public class PartyRequestTest extends StdTest
@@ -82,6 +84,7 @@ public class PartyRequestTest extends StdTest
 		competingPartiesAdmitCandidateOnce();
 		eachSideCanCloseItsOwnEntries();
 		closingAndJoiningHaveOneWinner();
+		transferKeepsOrderAndPending();
 	}
 
 	/** Checks both command orders, a repeat request, and replacement at the exact deadline. */
@@ -305,6 +308,42 @@ public class PartyRequestTest extends StdTest
 				"Membership must agree with whether approval won.");
 		check(store.pendingEntries("Alice").isEmpty() && store.pendingEntries("Bob").isEmpty(),
 				"Either winning operation should retire the request.");
+	}
+
+	/** Checks transfer permissions, pending IDs and deadlines, and succession after transfer. */
+	private static void transferKeepsOrderAndPending()
+	{
+		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
+		store.create("Alice");
+		final long bobInvite = store.invite("Alice", "Bob").getEntry().getId();
+		check(store.acceptInvitation("Bob", bobInvite).getStatus() == JoinStatus.JOINED, "Bob should join Alice.");
+		final PartySnapshot before = store.findByMember("Alice");
+		final PartyPendingEntry request = sendRequest(store, "Carol", "Alice");
+		final PartyPendingEntry invite = store.invite("Alice", "Dave").getEntry();
+
+		check(store.transferLeadership("Bob", "Alice") == TransferResult.NOT_LEADER,
+				"An ordinary member cannot pass leadership.");
+		check(store.transferLeadership("Alice", "Carol") == TransferResult.NOT_MEMBER,
+				"A candidate with a pending request is not a member.");
+		check(store.transferLeadership("Alice", "Alice") == TransferResult.ALREADY_LEADER,
+				"The leader naming themselves should have no effect.");
+
+		check(store.transferLeadership("Alice", "Bob") == TransferResult.TRANSFERRED, "Alice can pass leadership to Bob.");
+		final PartySnapshot after = store.findByMember("Alice");
+		check(after.getId() == before.getId() && after.getMembers().equals(before.getMembers())
+				&& "Bob".equals(after.getLeader()), "Only the leader should change.");
+		check(store.pendingEntries("Alice").isEmpty() && visibleEntries(store, "Bob").equals(Arrays.asList(request, invite)),
+				"Bob should inherit both original pending records and Alice should lose access.");
+		check("Bob".equals(store.pendingEntries("Carol").get(0).getLeaderKey()),
+				"Carol's outgoing request should now name Bob as its party leader.");
+
+		check(store.approveRequest("Alice", request.getId()).getStatus() == JoinStatus.ENTRY_UNAVAILABLE
+				&& store.cancel("Alice", invite.getId()) == null, "The former leader cannot act on old IDs.");
+		check(store.cancel("Bob", invite.getId()) != null, "Bob can cancel an invite opened by Alice.");
+		check(store.approveRequest("Bob", request.getId()).getStatus() == JoinStatus.JOINED,
+				"Bob can approve the original request.");
+		check(store.leave("Bob") && "Alice".equals(store.findByMember("Carol").getLeader()),
+				"If Bob leaves, Alice still joined first and takes over.");
 	}
 
 	/**

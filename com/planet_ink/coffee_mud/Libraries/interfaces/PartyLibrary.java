@@ -52,6 +52,15 @@ public interface PartyLibrary extends CMLibrary
 	public boolean leaveParty(MOB character);
 
 	/**
+	 * Lets the current leader name another member as leader. A member can take
+	 * over even if they are offline, since their membership is still active.
+	 *
+	 * @param leader the player giving up leadership
+	 * @param memberName the exact character name of the member taking over
+	 */
+	public void transferLeadership(MOB leader, String memberName);
+
+	/**
 	 * Looks up an online player by exact character name and attempts to invite them.
 	 * Reports the result to the sender and delivers a new invitation to its recipient.
 	 *

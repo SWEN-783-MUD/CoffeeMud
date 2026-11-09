@@ -158,6 +158,30 @@ public final class InMemoryPartyStore implements PartyStore
 
 	/**
 	 * {@inheritDoc}
+	 * Checks both members and publishes the new leader under the store lock.
+	 *
+	 * @throws NullPointerException if either character key is null
+	 */
+	@Override
+	public synchronized TransferResult transferLeadership(final String leaderKey, final String memberKey)
+	{
+		Objects.requireNonNull(memberKey);
+		final PartySnapshot party = findByMember(leaderKey);
+		if((party == null) || !leaderKey.equals(party.getLeader()))
+			return TransferResult.NOT_LEADER;
+		if(leaderKey.equals(memberKey))
+			return TransferResult.ALREADY_LEADER;
+		if(!party.getMembers().contains(memberKey))
+			return TransferResult.NOT_MEMBER;
+
+		// Keep the same party ID and member order so pending entries carry over.
+		final long id = party.getId();
+		partiesById.put(Long.valueOf(id), new PartySnapshot(id, memberKey, party.getMembers()));
+		return TransferResult.TRANSFERRED;
+	}
+
+	/**
+	 * {@inheritDoc}
 	 * Checks and opens the entry under the store lock. A full party can still receive pending entries.
 	 *
 	 * @throws NullPointerException if either character key is null

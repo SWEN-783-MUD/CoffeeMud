@@ -36,6 +36,29 @@ public interface PartyStore
 	boolean leave(String characterKey);
 
 	/**
+	 * Passes leadership to another current member. The party ID, join order,
+	 * and pending entries stay the same.
+	 *
+	 * @param leaderKey the character giving up leadership
+	 * @param memberKey the member taking over
+	 * @return the outcome of the transfer
+	 */
+	TransferResult transferLeadership(String leaderKey, String memberKey);
+
+	/** The outcome of an explicit leadership transfer. */
+	enum TransferResult
+	{
+		/** The named member now leads the party. */
+		TRANSFERRED,
+		/** The actor does not currently lead a party. */
+		NOT_LEADER,
+		/** The named character is not a member of this party. */
+		NOT_MEMBER,
+		/** The actor named themselves. */
+		ALREADY_LEADER
+	}
+
+	/**
 	 * Lets a leader invite a character who has no party. Returns any live
 	 * invitation or request already open for this candidate and party.
 	 *

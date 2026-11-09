@@ -2,6 +2,7 @@ package com.planet_ink.coffee_mud.Tests;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -219,10 +220,10 @@ public class PartyInviteCommandTest extends StdTest
 	}
 
 	/**
-	 * Checks request output, succession, and approval through the real commands.
+	 * Checks request output, explicit transfer, approval, and succession through the real commands.
 	 *
 	 * @param alice the original leader
-	 * @param bob the member who will take over after Alice leaves
+	 * @param bob the member who will take over from Alice
 	 * @param carol the character asking to join
 	 */
 	private static void runRequestWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
@@ -254,15 +255,24 @@ public class PartyInviteCommandTest extends StdTest
 		check(bob.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
 				"Bob cannot approve while Alice is leader.");
 
-		// Alice's departure moves authority to Bob without changing Carol's request.
-		check(alice.command("PARTY", "LEAVE").contains("You left the party"), "Alice should be able to leave.");
-		check(CMLib.parties().findParty(alice.mob) == null, "Leaving should remove Alice's membership.");
-		check(bob.command("PARTY").contains("Your party leader is " + bobName), "Bob should become leader.");
+		// Transfer keeps Alice in the party and moves approval authority to Bob.
+		check(bob.command("PARTY", "LEADER", aliceName).contains("Only the current party leader"),
+				"An ordinary member cannot pass leadership.");
+		check(alice.command("PARTY", "LEADER", carolName).contains("is not in your party"),
+				"Alice cannot transfer to a character with just a pending request.");
+		check(alice.command("PARTY", "LEADER", bobName.toUpperCase(Locale.ROOT)).contains("passed party leadership to " + bobName),
+				"Alice can pass leadership across rooms using the exact name in a different case.");
+		check(bob.output().contains(aliceName + " passed party leadership to you"), "Bob should see the transfer notice.");
+		final PartySnapshot transferred = CMLib.parties().findParty(alice.mob);
+		check(bobName.equals(transferred.getLeader()) && transferred.getMembers().equals(Arrays.asList(aliceName, bobName)),
+				"Transfer should keep Alice and preserve the join order.");
 		final String pending = bob.command("PARTY", "PENDING");
 		check(pending.contains(carolName) && pending.contains("seconds left") && pending.contains("PARTY APPROVE " + id),
 				"The new leader should see Carol's original request and remaining time.");
 		check(alice.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
 				"Alice should lose the ability to approve.");
+		check(carol.command("PARTY", "PENDING").contains("You asked to join " + bobName),
+				"Carol's outgoing request should name the new leader.");
 		checkCombatRestriction(bob, "APPROVE", id);
 		check(CMLib.parties().findParty(carol.mob) == null, "A blocked approval should leave membership empty.");
 
@@ -275,6 +285,9 @@ public class PartyInviteCommandTest extends StdTest
 				"Carol should see the new roster after approval.");
 		check(carol.mob.location() == carolRoom && carol.mob.amFollowing() == null,
 				"Approval should neither move Carol nor start following.");
+		check(bob.command("PARTY", "LEAVE").contains("You left the party"), "Bob should be able to leave.");
+		check(carol.command("PARTY").contains("Your party leader is " + aliceName),
+				"Alice should take over again because she was first to join.");
 	}
 
 	/**
