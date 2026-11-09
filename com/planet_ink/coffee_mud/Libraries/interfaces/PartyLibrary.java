@@ -8,6 +8,7 @@ import com.planet_ink.coffee_mud.Common.interfaces.Session;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
 /** Connects CoffeeMud's player commands to party state for the current server run. */
 public interface PartyLibrary extends CMLibrary
@@ -108,10 +109,63 @@ public interface PartyLibrary extends CMLibrary
 	 * Publishes a player's location under the same lock as follow validation.
 	 * Room and directory callbacks run outside this operation.
 	 *
+	 * @param player the character being placed
 	 * @param write the location field update, which returns the previous room
 	 * @return the previous room
 	 */
-	public Room changePlayerLocation(Supplier<Room> write);
+	public Room changePlayerLocation(MOB player, Supplier<Room> write);
+
+	/**
+	 * Captures an independent step and its current party branches.
+	 *
+	 * @param player the character entering the travel command
+	 * @return the root step, or null if the character cannot start
+	 */
+	public Step captureTravel(MOB player);
+
+	/**
+	 * Checks that a captured character is still ready to leave the source room.
+	 *
+	 * @param step the captured character and follow link
+	 * @param destination the intended room
+	 * @return whether the character is still eligible to take the step
+	 */
+	public boolean canTravel(Step step, Room destination);
+
+	/**
+	 * Rechecks the step and removes the character from the source room before native leave messages.
+	 *
+	 * @param step the character about to leave
+	 * @param destination the intended room
+	 * @return whether the character was removed
+	 */
+	public boolean departTravel(Step step, Room destination);
+
+	/**
+	 * Rechecks the step after native leave messages and places the character.
+	 * Independent movement clears any outgoing party link only on a room change.
+	 *
+	 * @param step the character about to enter
+	 * @param destination the room approved by the native move
+	 * @return whether the character was placed
+	 */
+	public boolean arriveTravel(Step step, Room destination);
+
+	/**
+	 * Restores source room membership after an interrupted step if the same
+	 * session is still there and has not moved.
+	 *
+	 * @param step the interrupted character
+	 */
+	public void restoreTravelSource(Step step);
+
+	/**
+	 * Drops a blocked follower's original outgoing link if it is still current.
+	 *
+	 * @param step the blocked follower and their captured link
+	 * @return whether this call cleared the link
+	 */
+	public boolean detachBlockedFollower(Step step);
 
 	/**
 	 * Clears the departing player's direct party links and blocks new ones until login.

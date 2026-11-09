@@ -1773,7 +1773,7 @@ public class StdMOB implements MOB
 	{
 		final PartyLibrary parties = isPlayer() ? CMLib.parties() : null;
 		final Room previous = parties == null ? publishLocation(newRoom)
-				: parties.changePlayerLocation(() -> publishLocation(newRoom));
+				: parties.changePlayerLocation(this, () -> publishLocation(newRoom));
 
 		// Update the directory and pose outside the follow lock.
 		if((playerStats != null) && (previous != newRoom))

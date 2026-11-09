@@ -2,10 +2,12 @@ package com.planet_ink.coffee_mud.Libraries;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.BooleanSupplier;
@@ -31,6 +33,7 @@ import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingView;
 import com.planet_ink.coffee_mud.core.party.PartyStore.TransferResult;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
 /** Handles live players and feedback around the party store's membership rules. */
 public class CMParties extends StdLibrary implements PartyLibrary
@@ -43,6 +46,18 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** Characters whose session is ending. Guarded by characterLock. */
 	private final Set<MOB> departingFollowers = Collections.newSetFromMap(new WeakHashMap<MOB, Boolean>());
+
+	/** Changes to live positions and links. Guarded by characterLock. */
+	private final Map<MOB, TravelRevisions> travelRevisions = new WeakHashMap<MOB, TravelRevisions>();
+
+	/** Detects an intervening move or link change even if the original room or target returns. */
+	private static final class TravelRevisions
+	{
+		/** Increments on a room change or session departure. */
+		private long position;
+		/** Increments when the outgoing target changes. */
+		private long follow;
+	}
 
 	/** The store for this server run. Access is guarded by characterLock. */
 	private PartyStore store = new InMemoryPartyStore();
@@ -164,18 +179,196 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				if(result != FollowResult.ALLOWED)
 					return result;
 			}
-			return write.getAsBoolean() ? FollowResult.ALLOWED : FollowResult.LINK_CHANGED;
+			final MOB previous = follower.amFollowing();
+			if(!write.getAsBoolean())
+				return FollowResult.LINK_CHANGED;
+			if(previous != target)
+				revisions(follower).follow++;
+			return FollowResult.ALLOWED;
 		}
 	}
 
 	/** {@inheritDoc} */
 	@Override
-	public Room changePlayerLocation(final Supplier<Room> write)
+	public Room changePlayerLocation(final MOB player, final Supplier<Room> write)
 	{
 		synchronized(characterLock)
 		{
-			return write.get();
+			final Room previous = write.get();
+			if(previous != player.location())
+				revisions(player).position++;
+			return previous;
 		}
+	}
+
+	/**
+	 * Looks up a live character's revisions while holding characterLock.
+	 *
+	 * @param player the character whose travel state is needed
+	 * @return their revisions, initialized on first use
+	 */
+	private TravelRevisions revisions(final MOB player)
+	{
+		return travelRevisions.computeIfAbsent(player, key -> new TravelRevisions());
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public Step captureTravel(final MOB player)
+	{
+		synchronized(characterLock)
+		{
+			if(!canStartFollowing(player))
+				return null;
+			final Room source = player.location();
+			if((source == null) || !source.isInhabitant(player))
+				return null;
+			final PartySnapshot party = store.findByMember(characterKey(player));
+			final Set<MOB> seen = new HashSet<MOB>();
+			seen.add(player);
+			return captureStep(player, null, source, party, seen);
+		}
+	}
+
+	/**
+	 * Takes a parent-first snapshot of the native party links under characterLock.
+	 *
+	 * @param player the character at this step
+	 * @param parent the player's follow target, or null for the root
+	 * @param source the room the root is leaving
+	 * @param party the captured roster, if any
+	 * @param seen the characters already captured
+	 * @return the step and its captured children
+	 */
+	private Step captureStep(final MOB player, final MOB parent, final Room source, final PartySnapshot party,
+			final Set<MOB> seen)
+	{
+		final List<Step> children = new ArrayList<Step>();
+		if(party != null)
+		{
+			for(final Enumeration<Pair<MOB, Short>> followers = player.followers(); followers.hasMoreElements();)
+			{
+				final MOB follower = followers.nextElement().first;
+				if(canStartFollowing(follower) && (follower.amFollowing() == player)
+				&& party.getMembers().contains(characterKey(follower)) && seen.add(follower))
+					children.add(captureStep(follower, player, source, party, seen));
+			}
+		}
+		final TravelRevisions revision = revisions(player);
+		return new Step(player, parent, source, player.location(), player.session(), party == null ? 0 : party.getId(),
+				revision.position, revision.follow, parent == null ? 0 : revisions(parent).position, children);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean canTravel(final Step step, final Room destination)
+	{
+		synchronized(characterLock)
+		{
+			return isCurrentStep(step, destination) && step.source.isInhabitant(step.player);
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean departTravel(final Step step, final Room destination)
+	{
+		synchronized(characterLock)
+		{
+			if(!isCurrentStep(step, destination) || !step.source.isInhabitant(step.player))
+				return false;
+			step.source.delInhabitant(step.player);
+			return true;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean arriveTravel(final Step step, final Room destination)
+	{
+		synchronized(characterLock)
+		{
+			if(!isCurrentStep(step, destination) || step.source.isInhabitant(step.player))
+				return false;
+
+			// Publish the room and any independent unlink together, before enter callbacks run.
+			if((step.parent == null) && (destination != step.source) && isPlayerCharacter(step.player.amFollowing()))
+				step.player.setFollowing(null);
+			step.player.setLocation(destination);
+			destination.addInhabitant(step.player);
+			return true;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void restoreTravelSource(final Step step)
+	{
+		synchronized(characterLock)
+		{
+			if(isOriginalPosition(step) && (step.player.location() == step.source)
+			&& !step.source.isInhabitant(step.player))
+				step.source.addInhabitant(step.player);
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean detachBlockedFollower(final Step step)
+	{
+		synchronized(characterLock)
+		{
+			if((step.parent == null) || !isOriginalPosition(step) || !isOriginalFollow(step))
+				return false;
+			step.player.setFollowing(null);
+			return true;
+		}
+	}
+
+	/**
+	 * Verifies a captured step before any position write. Call this while holding characterLock.
+	 *
+	 * @param step the captured traveler
+	 * @param destination the room they would enter
+	 * @return whether the current position and branch still match
+	 */
+	private boolean isCurrentStep(final Step step, final Room destination)
+	{
+		if((destination == null) || (step.startingRoom != step.source) || !isOriginalPosition(step))
+			return false;
+		if(step.parent == null)
+			return true;
+		return isOriginalFollow(step) && canStartFollowing(step.parent)
+				&& (step.parent.location() == destination) && destination.isInhabitant(step.parent)
+				&& (revisions(step.parent).position == step.parentPositionRevision + 1);
+	}
+
+	/**
+	 * Verifies that a session still owns the original position. Call this while holding characterLock.
+	 *
+	 * @param step the captured traveler
+	 * @return whether they are still in the same position with the same session
+	 */
+	private boolean isOriginalPosition(final Step step)
+	{
+		return canStartFollowing(step.player) && (step.player.session() == step.session)
+				&& (step.player.location() == step.startingRoom)
+				&& (revisions(step.player).position == step.positionRevision);
+	}
+
+	/**
+	 * Verifies the original party and outgoing link while holding characterLock.
+	 *
+	 * @param step the captured follower
+	 * @return whether the original party link is still in effect
+	 */
+	private boolean isOriginalFollow(final Step step)
+	{
+		if((step.player.amFollowing() != step.parent) || (revisions(step.player).follow != step.followRevision))
+			return false;
+		final PartySnapshot party = store.findByMember(characterKey(step.player));
+		return (party != null) && (party.getId() == step.partyId)
+				&& party.getMembers().contains(characterKey(step.parent));
 	}
 
 	/**
@@ -254,7 +447,8 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			// A delayed close from an old session cannot clear the new session's links.
 			if((session != null) && isPlayerCharacter(player) && (player.session() == session))
 			{
-				departingFollowers.add(player);
+				if(departingFollowers.add(player))
+					revisions(player).position++;
 				clearPartyLinks(player);
 			}
 		}
@@ -780,6 +974,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			store = new InMemoryPartyStore();
 			retiredCharacters.clear();
 			departingFollowers.clear();
+			travelRevisions.clear();
 		}
 		return super.shutdown();
 	}
