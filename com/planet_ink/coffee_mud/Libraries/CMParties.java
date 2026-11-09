@@ -2,7 +2,13 @@ package com.planet_ink.coffee_mud.Libraries;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import com.planet_ink.coffee_mud.Common.interfaces.Session;
 import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary;
@@ -17,13 +23,21 @@ import com.planet_ink.coffee_mud.core.party.PartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyStore.JoinResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingView;
+import com.planet_ink.coffee_mud.core.party.PartyStore.TransferResult;
 
 /** Handles live players and feedback around the party store's membership rules. */
 public class CMParties extends StdLibrary implements PartyLibrary
 {
-	/** The shared store for this server run, replaced when the library shuts down. */
-	private volatile PartyStore store = new InMemoryPartyStore();
+	/** Keeps character name reads and party operations together with rename and deletion. */
+	private final Object characterLock = new Object();
+
+	/** Deleted live objects with commands that may still be finishing. Guarded by characterLock. */
+	private final Set<MOB> retiredCharacters = Collections.newSetFromMap(new WeakHashMap<MOB, Boolean>());
+
+	/** The store for this server run. Access is guarded by characterLock. */
+	private PartyStore store = new InMemoryPartyStore();
 
 	/**
 	 * Identifies this library in CoffeeMud's registry.
@@ -56,31 +70,93 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
+	public boolean renameCharacter(final MOB character, final String oldName, final String newName,
+			final BooleanSupplier save)
+	{
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(character) || !oldName.equals(character.Name()) || !save.getAsBoolean())
+				return false;
+
+			// Capture the old key before publishing the new name to other game systems.
+			store.renameCharacter(characterKey(character), CMStrings.capitalizeAndLower(newName));
+			character.setName(newName);
+			return true;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public DeleteResult deleteCharacter(final MOB character, final Predicate<String> remove)
+	{
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(character))
+				return DeleteResult.UNAVAILABLE;
+			if(!remove.test(character.Name()))
+				return DeleteResult.SAVE_FAILED;
+
+			// Reject delayed commands that still hold the deleted object.
+			retiredCharacters.add(character);
+			store.deleteCharacter(characterKey(character));
+			return DeleteResult.DELETED;
+		}
+	}
+
+	/**
+	 * Runs a store operation with the actor's current name. Callers send feedback
+	 * after this method returns so session and room code run outside the lock.
+	 *
+	 * @param <T> the operation's result type
+	 * @param actor the character acting on party state
+	 * @param operation the store operation using the current key
+	 * @return the result, or {@code null} if the actor is unavailable
+	 */
+	private <T> T withCharacter(final MOB actor, final Function<String, T> operation)
+	{
+		synchronized(characterLock)
+		{
+			return canUseCharacter(actor) ? operation.apply(characterKey(actor)) : null;
+		}
+	}
+
+	/**
+	 * Checks whether a live object can still act under its character name.
+	 * Call this while holding characterLock.
+	 *
+	 * @param character the actor or target to check
+	 * @return whether the player object can use party state
+	 */
+	private boolean canUseCharacter(final MOB character)
+	{
+		return isPlayerCharacter(character) && !character.amDestroyed() && !retiredCharacters.contains(character);
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public CreateResult createParty(final MOB character)
 	{
 		if(!isPlayerCharacter(character))
 			return CreateResult.NOT_PLAYER;
 		if(character.isInCombat())
 			return CreateResult.IN_COMBAT;
-		if(store.create(characterKey(character)) == null)
-			return CreateResult.ALREADY_MEMBER;
-		return CreateResult.CREATED;
+		final CreateResult result = withCharacter(character, key -> store.create(key) == null
+				? CreateResult.ALREADY_MEMBER : CreateResult.CREATED);
+		return result == null ? CreateResult.NOT_PLAYER : result;
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public PartySnapshot findParty(final MOB character)
 	{
-		if(!isPlayerCharacter(character))
-			return null;
-		return store.findByMember(characterKey(character));
+		return withCharacter(character, key -> store.findByMember(key));
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public boolean leaveParty(final MOB character)
 	{
-		return isPlayerCharacter(character) && store.leave(characterKey(character));
+		return Boolean.TRUE.equals(withCharacter(character, key -> Boolean.valueOf(store.leave(key))));
 	}
 
 	/** {@inheritDoc} */
@@ -92,11 +168,19 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 		// Match a roster key so a disconnected member can still take over.
 		final String memberKey = CMStrings.capitalizeAndLower(memberName);
-		switch(store.transferLeadership(characterKey(leader), memberKey))
+		final TransferResult result;
+		final MOB newLeader;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(leader))
+				return;
+			result = store.transferLeadership(characterKey(leader), memberKey);
+			newLeader = result == TransferResult.TRANSFERRED ? findOnlinePlayer(memberKey) : null;
+		}
+		switch(result)
 		{
 		case TRANSFERRED:
 			leader.tell(L("You passed party leadership to @x1.", memberKey));
-			final MOB newLeader = findOnlinePlayer(memberKey);
 			if(newLeader != null)
 				newLeader.tell(L("@x1 passed party leadership to you. Use PARTY PENDING to see pending entries.",
 						leader.Name()));
@@ -124,25 +208,34 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		if(!canManageParty(sender))
 			return;
 
-		// Check the sender before looking up another player. The store rechecks leadership when writing.
-		final PartyStore currentStore = store;
-		final String senderKey = characterKey(sender);
-		final PartySnapshot party = currentStore.findByMember(senderKey);
-		if((party == null) || !senderKey.equals(party.getLeader()))
+		final MOB recipient;
+		final PendingResult result;
+		synchronized(characterLock)
 		{
-			sender.tell(L("Only a party leader can send invitations."));
-			return;
+			if(!canUseCharacter(sender))
+				return;
+
+			// Check the sender before looking up another player.
+			final String senderKey = characterKey(sender);
+			final PartySnapshot party = store.findByMember(senderKey);
+			if((party == null) || !senderKey.equals(party.getLeader()))
+			{
+				recipient = null;
+				result = new PendingResult(PendingStatus.NOT_LEADER, null);
+			}
+			else
+			{
+				recipient = findOnlinePlayer(recipientName);
+				result = recipient == null ? null : store.invite(senderKey, characterKey(recipient));
+			}
 		}
 
-		// Resolve the live player before asking the store to record the invite.
-		final MOB recipient = findOnlinePlayer(recipientName);
-		if(recipient == null)
+		if(result == null)
 		{
 			sender.tell(L("No online player has the character name @x1.", recipientName));
 			return;
 		}
 
-		final PendingResult result = currentStore.invite(senderKey, characterKey(recipient));
 		switch(result.getStatus())
 		{
 		case CREATED:
@@ -180,17 +273,23 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		if(!canManageParty(candidate))
 			return;
 
-		// Use the same online lookup as invitations. The store checks current leadership.
-		final MOB leader = findOnlinePlayer(leaderName);
-		if(leader == null)
+		final MOB leader;
+		final PendingResult result;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(candidate))
+				return;
+
+			// Keep the online lookup and entry creation on the same names.
+			leader = findOnlinePlayer(leaderName);
+			result = leader == null ? null : store.requestJoin(characterKey(candidate), characterKey(leader));
+		}
+		if(result == null)
 		{
 			candidate.tell(L("No online player has the character name @x1.", leaderName));
 			return;
 		}
 
-		final PartyStore currentStore = store;
-		final String leaderKey = characterKey(leader);
-		final PendingResult result = currentStore.requestJoin(characterKey(candidate), leaderKey);
 		switch(result.getStatus())
 		{
 		case CREATED:
@@ -200,8 +299,12 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			candidate.tell(L("You asked to join @x1's party. Request ID is @x2.", leader.Name(), id));
 
 			// If leadership changed while the request was opening, the new leader can see it in PARTY PENDING.
-			final PartySnapshot current = currentStore.findByMember(leaderKey);
-			if((current != null) && (current.getId() == entry.getPartyId()) && leaderKey.equals(current.getLeader()))
+			final Boolean stillLeads = withCharacter(leader, key -> {
+				final PartySnapshot current = store.findByMember(key);
+				return Boolean.valueOf((current != null) && (current.getId() == entry.getPartyId())
+						&& key.equals(current.getLeader()));
+			});
+			if(Boolean.TRUE.equals(stillLeads))
 				leader.tell(L("@x1 asked to join your party. Use PARTY APPROVE @x2 or PARTY PENDING.",
 						candidate.Name(), id));
 			break;
@@ -231,12 +334,16 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void showPendingEntries(final MOB character)
 	{
-		if(!isPlayerCharacter(character))
-			return;
-
 		final Instant now = Instant.now();
-		final String key = characterKey(character);
-		final List<PendingView> pending = store.pendingEntries(key);
+		final String key;
+		final List<PendingView> pending;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(character))
+				return;
+			key = characterKey(character);
+			pending = store.pendingEntries(key);
+		}
 		if(pending.isEmpty())
 		{
 			character.tell(L("You have no pending party invitations or requests."));
@@ -282,31 +389,78 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	public void acceptInvitation(final MOB character, final long invitationId)
 	{
 		if(canManageParty(character))
-			reportJoinResult(character, store.acceptInvitation(characterKey(character), invitationId), Type.INVITATION);
+		{
+			final JoinResult result = withCharacter(character, key -> store.acceptInvitation(key, invitationId));
+			if(result != null)
+				reportJoinResult(character, result, Type.INVITATION, null);
+		}
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void approveRequest(final MOB leader, final long requestId)
 	{
-		if(canManageParty(leader))
-			reportJoinResult(leader, store.approveRequest(characterKey(leader), requestId), Type.REQUEST);
+		if(!canManageParty(leader))
+			return;
+
+		final JoinResult result;
+		final MOB candidate;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(leader))
+				return;
+			result = store.approveRequest(characterKey(leader), requestId);
+
+			// Capture the recipient before a rename or deletion can reuse the key.
+			final String candidateKey = result.getJoinedCandidateKey();
+			candidate = candidateKey == null ? null : findOnlinePlayer(candidateKey);
+		}
+		reportJoinResult(leader, result, Type.REQUEST, candidate);
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void declineEntry(final MOB actor, final long entryId)
 	{
-		if(canManageParty(actor))
-			reportClosedEntry(actor, store.decline(characterKey(actor), entryId), true);
+		closePendingEntry(actor, entryId, true);
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void cancelEntry(final MOB actor, final long entryId)
 	{
-		if(canManageParty(actor))
-			reportClosedEntry(actor, store.cancel(characterKey(actor), entryId), false);
+		closePendingEntry(actor, entryId, false);
+	}
+
+	/**
+	 * Closes an entry and captures the other side before either name can change.
+	 *
+	 * @param actor the player who entered the command
+	 * @param entryId the entry to close
+	 * @param declined whether the actor is responding or withdrawing
+	 */
+	private void closePendingEntry(final MOB actor, final long entryId, final boolean declined)
+	{
+		if(!canManageParty(actor))
+			return;
+
+		final PendingView closed;
+		final MOB other;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(actor))
+				return;
+			final String actorKey = characterKey(actor);
+			closed = declined ? store.decline(actorKey, entryId) : store.cancel(actorKey, entryId);
+			if(closed == null)
+				other = null;
+			else
+			{
+				final String candidateKey = closed.getEntry().getCandidateKey();
+				other = findOnlinePlayer(actorKey.equals(candidateKey) ? closed.getLeaderKey() : candidateKey);
+			}
+		}
+		reportClosedEntry(actor, closed, other, declined);
 	}
 
 	/**
@@ -314,9 +468,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	 *
 	 * @param actor the player who entered the command
 	 * @param closed the entry closed by the store, or {@code null} if unavailable
+	 * @param other the player on the other side, or {@code null} if offline
 	 * @param declined whether the actor turned it down or withdrew it
 	 */
-	private void reportClosedEntry(final MOB actor, final PendingView closed, final boolean declined)
+	private void reportClosedEntry(final MOB actor, final PendingView closed, final MOB other, final boolean declined)
 	{
 		if(closed == null)
 		{
@@ -330,10 +485,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		actor.tell(declined ? L("You declined the @x1 (ID @x2).", type, id)
 				: L("You cancelled the @x1 (ID @x2).", type, id));
 
-		// Use the leader captured when the entry closed, even if someone else sent the original invite.
-		final String otherKey = characterKey(actor).equals(entry.getCandidateKey())
-				? closed.getLeaderKey() : entry.getCandidateKey();
-		final MOB other = findOnlinePlayer(otherKey);
 		if(other != null)
 			other.tell(declined ? L("@x1 declined your @x2 (ID @x3).", actor.Name(), type, id)
 					: L("@x1 cancelled the @x2 (ID @x3).", actor.Name(), type, id));
@@ -345,8 +496,9 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	 * @param actor the player who entered the command
 	 * @param result the outcome from the store
 	 * @param type the entry type handled by the command
+	 * @param candidate the newly approved player, if online
 	 */
-	private void reportJoinResult(final MOB actor, final JoinResult result, final Type type)
+	private void reportJoinResult(final MOB actor, final JoinResult result, final Type type, final MOB candidate)
 	{
 		final boolean approval = type == Type.REQUEST;
 		switch(result.getStatus())
@@ -357,8 +509,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				final String candidateKey = result.getJoinedCandidateKey();
 				actor.tell(L("@x1 joined your party. Use PARTY to see the roster.", candidateKey));
 
-				// Approval uses the character key even if the candidate logged out.
-				final MOB candidate = findOnlinePlayer(candidateKey);
 				if(candidate != null)
 					candidate.tell(L("@x1 approved your request. You joined the party. Use PARTY to see the roster.",
 							actor.Name()));
@@ -409,6 +559,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	/**
 	 * Finds an active player in this game by their exact character name.
 	 * The session list includes players in other rooms and checks that they are in-game.
+	 * Call this while holding characterLock so the returned object matches its name.
 	 *
 	 * @param name the character name supplied by a player
 	 * @return the live character, or {@code null} if nobody matches
@@ -418,7 +569,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		for(final Session session : CMLib.sessions().localOnlineIterableAllHosts())
 		{
 			final MOB player = session.mob();
-			if(isPlayerCharacter(player) && (player.session() == session) && player.Name().equalsIgnoreCase(name))
+			if(canUseCharacter(player) && (player.session() == session) && player.Name().equalsIgnoreCase(name))
 				return player;
 		}
 		return null;
@@ -441,7 +592,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		final Duration lifetime = configuredSeconds > 0
 				? Duration.ofSeconds(configuredSeconds) : InMemoryPartyStore.DEFAULT_PENDING_LIFETIME;
 		final int memberLimit = configuredLimit > 0 ? configuredLimit : InMemoryPartyStore.DEFAULT_MEMBER_LIMIT;
-		store = new InMemoryPartyStore(Instant::now, lifetime, memberLimit);
+		synchronized(characterLock)
+		{
+			store = new InMemoryPartyStore(Instant::now, lifetime, memberLimit);
+		}
 		return super.activate();
 	}
 
@@ -453,7 +607,11 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public boolean shutdown()
 	{
-		store = new InMemoryPartyStore();
+		synchronized(characterLock)
+		{
+			store = new InMemoryPartyStore();
+			retiredCharacters.clear();
+		}
 		return super.shutdown();
 	}
 }

@@ -324,6 +324,12 @@ public class PartyCommandTest extends StdTest
 				return stats;
 			case "isInCombat":
 				return Boolean.valueOf(inCombat);
+			case "amDestroyed":
+				return Boolean.FALSE;
+			case "hashCode":
+				return Integer.valueOf(System.identityHashCode(proxy));
+			case "equals":
+				return Boolean.valueOf(proxy == args[0]);
 			case "tell":
 				messages.add((String)args[0]);
 				return null;

@@ -1,5 +1,8 @@
 package com.planet_ink.coffee_mud.Libraries.interfaces;
 
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
+
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 
@@ -26,6 +29,40 @@ public interface PartyLibrary extends CMLibrary
 	 * @return whether the actor has player stats
 	 */
 	public boolean isPlayerCharacter(MOB character);
+
+	/**
+	 * Commits a character rename and updates the live name and party state together.
+	 * The directory supplies the checked database write, which runs while party
+	 * commands wait. A failed write leaves the character and party state alone.
+	 *
+	 * @param character the character being renamed
+	 * @param oldName the expected current name
+	 * @param newName the new character name
+	 * @param save the directory's name validation and database write
+	 * @return whether the rename committed
+	 */
+	public boolean renameCharacter(MOB character, String oldName, String newName, BooleanSupplier save);
+
+	/**
+	 * Commits a character deletion and retires their party state before another
+	 * character can use the same name in party commands.
+	 *
+	 * @param character the character being deleted
+	 * @param remove the directory's checked database write, given the current name
+	 * @return the result of the deletion attempt
+	 */
+	public DeleteResult deleteCharacter(MOB character, Predicate<String> remove);
+
+	/** The result of deleting a character and retiring their party state. */
+	public enum DeleteResult
+	{
+		/** The character row was removed and its party state retired. */
+		DELETED,
+		/** This object no longer represents an available player character. */
+		UNAVAILABLE,
+		/** The character row could not be removed. */
+		SAVE_FAILED
+	}
 
 	/**
 	 * Creates a party with the player as leader and first member.
