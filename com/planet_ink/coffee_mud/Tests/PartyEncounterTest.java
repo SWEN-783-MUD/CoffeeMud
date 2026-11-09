@@ -136,8 +136,9 @@ public class PartyEncounterTest extends StdTest
 				check(manager.activateEncounter(interrupted) && manager.completeEncounter(interrupted),
 						"The encounter should still finish with the opener.");
 
+				checkRoomPermission(alice,room,guard);
+
 				// Existing manual initiation uses the same manager and captures the opener's current approach.
-				manager.setEntryTrigger(null);
 				final CMMsg nativeAttack = CMClass.getMsg(guard,alice.getMob(),null,CMMsg.MSG_WEAPONATTACK,null);
 				check(room.okMessage(guard,nativeAttack),"Native attack permission should return after the encounter ends.");
 				check(alice.command("KILL","Guard").contains("is pending"),"The team's KILL trigger should still open an encounter.");
@@ -161,6 +162,30 @@ public class PartyEncounterTest extends StdTest
 			hall.destroy();
 			area.destroy();
 		}
+	}
+
+	/**
+	 * Checks that an entry rule still needs room permission and that manual-only rooms wait.
+	 *
+	 * @param player the character entering through the west side
+	 * @param room the guardroom applying the permission check
+	 * @param guard the NPC returned by the entry rule
+	 */
+	private static void checkRoomPermission(final TestPlayer player, final EntryRoom room, final MOB guard)
+	{
+		final EncounterManager manager = room.getEncounterManager();
+		manager.setEntryTrigger(batch -> guard);
+		room.denyOpening = true;
+		player.command("WEST");
+		player.command("EAST");
+		check(room.deniedOpening && manager.getEncounter() == null && room.isInhabitant(player.getMob()),
+				"A room veto should stop encounter setup while leaving the successful arrival in place.");
+
+		room.denyOpening = false;
+		manager.setEntryTrigger(null);
+		player.command("WEST");
+		player.command("EAST");
+		check(manager.getEncounter() == null,"An enabled room without an entry rule should wait for manual initiation.");
 	}
 
 	/**
@@ -308,6 +333,10 @@ public class PartyEncounterTest extends StdTest
 		private boolean attackChecked;
 		/** An optional follower whose entry is refused by the room. */
 		private MOB blocked;
+		/** Whether to refuse the opener's attack permission check. */
+		private boolean denyOpening;
+		/** Whether the fixture observed that permission check. */
+		private boolean deniedOpening;
 
 		/** {@inheritDoc} */
 		@Override
@@ -320,6 +349,11 @@ public class PartyEncounterTest extends StdTest
 		@Override
 		public boolean okMessage(final Environmental host, final CMMsg msg)
 		{
+			if(denyOpening && (msg.target() == guard) && (msg.targetMinor() == CMMsg.TYP_WEAPONATTACK))
+			{
+				deniedOpening = true;
+				return false;
+			}
 			return !((blocked != null) && (msg.source() == blocked) && (msg.target() == this)
 					&& (msg.sourceMinor() == CMMsg.TYP_ENTER)) && super.okMessage(host,msg);
 		}
