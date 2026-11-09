@@ -6,9 +6,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import com.planet_ink.coffee_mud.Common.interfaces.PlayerAccount;
 import com.planet_ink.coffee_mud.Common.interfaces.PlayerStats;
 import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary.CreateResult;
+import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
+import com.planet_ink.coffee_mud.Tests.PartyInviteCommandTest.TestPlayer;
 import com.planet_ink.coffee_mud.core.CMClass;
 import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
@@ -46,6 +49,7 @@ public class PartyLifecycleTest extends StdTest
 		{
 			runStoreCases();
 			checkPlayerDirectory();
+			checkSharedAccount(mob.location());
 			return null;
 		}
 		catch(final InterruptedException error)
@@ -56,6 +60,40 @@ public class PartyLifecycleTest extends StdTest
 		catch(final AssertionError | Exception error)
 		{
 			return error.toString();
+		}
+	}
+
+	/**
+	 * Exercises separate characters on one account through the real party commands.
+	 *
+	 * @param room the temporary host room
+	 */
+	private static void checkSharedAccount(final Room room)
+	{
+		final String suffix = UUID.randomUUID().toString().substring(0,8);
+		final PlayerAccount account = (PlayerAccount)CMClass.getCommon("DefaultPlayerAccount");
+		account.setAccountName("Shared" + suffix);
+		try(TestPlayer first = new TestPlayer("First" + suffix,room);
+			TestPlayer second = new TestPlayer("Second" + suffix,room);
+			TestPlayer guest = new TestPlayer("Guest" + suffix,room))
+		{
+			first.getMob().playerStats().setAccount(account);
+			second.getMob().playerStats().setAccount(account);
+			check(first.command("PARTY","CREATE").contains("You created a party")
+					&& second.command("PARTY","CREATE").contains("You created a party"),
+					"Both characters on the account should be able to create their own party.");
+
+			final String guestName = guest.getMob().Name();
+			final String firstId = PartyInviteCommandTest.sentId(first.command("PARTY","INVITE",guestName));
+			final String secondId = PartyInviteCommandTest.sentId(second.command("PARTY","INVITE",guestName));
+			check(!firstId.equals(secondId),"The two characters should own separate pending invitations.");
+			check(guest.command("PARTY","ACCEPT",secondId).contains("You joined the party"),
+					"The guest should be able to choose the second character's party.");
+			final PartyStore.PartySnapshot firstParty = CMLib.parties().findParty(first.getMob());
+			final PartyStore.PartySnapshot secondParty = CMLib.parties().findParty(second.getMob());
+			check(firstParty.getId() != secondParty.getId() && firstParty.getMembers().size() == 1
+					&& secondParty.getMembers().contains(guestName),
+					"Accepting one character's invite should change only that character's roster.");
 		}
 	}
 

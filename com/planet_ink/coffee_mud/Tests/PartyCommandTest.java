@@ -328,6 +328,7 @@ public class PartyCommandTest extends StdTest
 			case "amDestroyed":
 				return Boolean.FALSE;
 			case "amFollowing":
+			case "location":
 				return null;
 			case "followers":
 				return Collections.emptyEnumeration();
