@@ -1,58 +1,88 @@
 ---
-status: proposed/accepted
-date: 2026-09-22
+status: accepted
+date: 2026-11-09
 ---
 
-# Use Pathfinder 2e (Pathfinder Second Edition Remaster) as the Combat Ruleset
+# Use a Scoped Pathfinder 2e Remaster Combat Ruleset
 
 ## Context and Problem Statement
 
-CoffeeMUD has its own character attributes, combat calculations, and action rules. We want to adopt Pathfinder 2e’s attribute modifiers, proficiency scaling, three-action economy, and d20 checks with four degrees of success as a consistent foundation for combat.
+CoffeeMUD has its own combat calculations, character statistics, abilities, and equipment. Milestone 1 needs one complete multiplayer tactical encounter using a consistent set of rules without first adapting every native character and ability.
 
-Using these rules together gives us an established framework for balancing characters, abilities, equipment, and encounters. This decision covers the combat ruleset; turn-handling architecture and positional combat are separate decisions.
+We will use a defined subset of Pathfinder 2e Remaster combat, supplied through fixed player and NPC presets. This is a milestone scope decision, not a claim that the full PF2e ruleset or all CoffeeMUD integrations are implemented. Turn management and positional combat are covered by separate MADRs.
 
 ## Decision Drivers
 
-* Use PF2e’s balance framework for characters, abilities, equipment, and encounters.
-* Apply consistent rules for attribute modifiers and proficiency scaling.
-* Use defined rolls, difficulty classes, and degrees of success.
-* Support tactical choices through PF2e’s actions and reactions.
-* Reuse CoffeeMUD infrastructure where practical.
+- Use consistent attack, defense, movement, and action rules for players and NPCs.
+- Deliver a playable encounter with deterministic, testable rule boundaries.
+- Keep character conversion and equipment integration manageable.
+- Preserve a path to broader PF2e support after the milestone.
+- Make MUD-specific recovery and multiplayer policies explicit.
 
 ## Considered Options
 
-* Retain CoffeeMUD’s existing combat rules.
-* Create a custom turn-based ruleset.
-* Adopt Pathfinder 2e combat rules.
+- Retain CoffeeMUD's native combat rules.
+- Create a custom tactical ruleset.
+- Adopt the full PF2e combat and character systems immediately.
+- Adopt a scoped PF2e combat subset using fixed presets.
 
 ## Decision Outcome
 
-Proposed/accepted choice: Pathfinder 2e combat rules, because they provide a shared
-foundation for balancing characters, abilities, equipment, and encounters.
-We will use its attribute modifiers, proficiency scaling, action economy,
-and d20 checks with four degrees of success.
+Chosen option: adopt a scoped PF2e Remaster combat subset using fixed presets. It provides shared combat rules while limiting the initial adaptation work.
 
-This decision covers the combat ruleset. How turns are managed and how
-position affects combat will be addressed in separate MADRs.
+### Milestone 1 Rules
+
+- Participants normally use Perception for initiative. Eligible characters Avoiding Notice may use Stealth, with detection resolved relative to relevant observers.
+- Each eligible participant receives three actions on their turn. Unused actions do not carry forward.
+- Supported actions are Stride, melee Strike, Raise a Shield, and End Turn.
+- Strike compares a d20 plus attack modifier and multiple attack penalty against AC. Totals at least 10 above AC critically succeed; totals at least 10 below AC critically fail. Other totals succeed when they meet AC.
+- A natural 20 improves the calculated degree of success by one step; a natural 1 worsens it by one step, bounded by the four available degrees.
+- A successful Strike deals normal weapon damage; a critical success deals double damage. Failure and critical failure deal no damage for the supported basic Strike.
+- Initial weapons are non-agile melee weapons. Repeated Strikes use penalties of 0, -5, and -10. A legal miss still spends its action and advances the attack count; invalid requests do neither.
+- Stride uses preset Speed and the movement rules in the positional-combat MADR.
+- Raise a Shield costs one action and grants its configured AC bonus until the start of the participant's next turn or encounter completion. It does not stack with itself.
+
+### Combat Values and Integration
+
+Presets provide maximum HP, AC, Perception, Stealth, Speed, attack modifier, weapon damage, reach, and supported weapon or shield details. Players and NPCs use the same rules. Missing or unsupported presets are reported before encounter admission; native abilities and equipment do not silently replace the supported rules.
+
+Current HP is separate from preset maximum HP. Inspecting a preset does not heal a character. Presets cannot change during pending, active, or awaiting-rescue encounters. Definitions and saved dungeon NPC assignments must survive reloads. The storage and mapping to CoffeeMUD character data remain integration work; this MADR does not select that mechanism.
+
+### Explicit MUD Policies
+
+The joining window, turn timeouts, rescue window, and recovery rules are project-specific policies, not assertions about standard PF2e rules.
+
+- Players reaching zero HP become unconscious; HP is clamped at zero. They cannot act or move but can use informational commands.
+- Victory restores unconscious players to exactly 1 HP. Conscious players retain their current HP.
+- When all enrolled players are unconscious and enemies remain, eligible conscious party members outside the encounter may receive a 15-second rescue opportunity. Participants stay unconscious during that window.
+- If rescue is unavailable or unsuccessful, defeat restores knocked-out participants to 1 HP and returns them to the dungeon entrance. Only that encounter's enemies reset; earlier cleared rooms keep their progress. Uninvolved party members are not moved or healed.
+
+### Deferred Scope
+
+The broader [Round and Turn Management epic (#22)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/22) includes reaction resources. They remain planned beyond this milestone; their deferral follows the explicit scope in [MUD-3.4.1 (#55)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/55).
+
+
+Full character creation, attribute/proficiency conversion, ranged attacks, spellcasting, reactions including Shield Block, advanced conditions, weapon effects, and PF2e dying/wounded/stabilization rules are deferred. Presets are a temporary source of combat values, not a replacement design for future character customization.
 
 ### Consequences
 
-- Good, because combat uses an established framework for balancing
-  characters, abilities, equipment, and encounters.
-- Good, because attributes, proficiency, actions, and rolls follow
-  consistent, documented rules.
-- Good, because expected behavior can be tested against PF2e rules.
-- Bad, because CoffeeMUD’s combat calculations, character statistics,
-  abilities, and equipment will need substantial adaptation.
-- Bad, because adopting only parts of PF2e or changing its rules may
-  affect balance and require additional testing.
- 
+- Good, because a small shared ruleset supports an end-to-end encounter and controlled tests.
+- Good, because later character systems can provide the same combat values.
+- Bad, because this subset does not inherit every balance guarantee of a complete PF2e implementation.
+- Bad, because native combat paths must be controlled so they cannot bypass encounter rules.
+- Bad, because persistent HP and preset assignment require explicit CoffeeMUD integration.
+
 ### Confirmation
 
-Validate the ruleset with a small combat prototype. Test attribute
-modifiers, proficiency bonuses, action costs, attack rolls, saving throws,
-and the four degrees of success against expected PF2e results.
+Use controlled attack and damage rolls to test all four degrees of success, natural-roll adjustments, multiple attack penalties, action expenditure, and shield expiration. Verify that invalid requests change neither HP nor action resources.
 
-Use updated characters, abilities, equipment, and creatures to
-check combat balance. Verify that players and NPCs follow the applicable
-rules.
+Test knockout, rescue, victory, and defeat separately from damage formulas. Confirm that preset inspection never heals a character, unsupported presets are rejected, and saved definitions and NPC assignments survive reloads. These are validation targets, not a statement that the tests already pass.
+
+## More Information
+
+- [Turn management](turn-system-madr.md)
+- [Positional combat](positional-combat-madr.md)
+- [Epic 3: Unstructured Encounter Lifecycle](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39)
+- [Epic: Combat Math Library](https://github.com/SWEN-783-MUD/CoffeeMud/issues/63)
+- [MUD-3.11: Combat Presets & Fixed Equipment](https://github.com/SWEN-783-MUD/CoffeeMud/issues/50)
+- [MUD-3.4.5: Melee Strike & Damage](https://github.com/SWEN-783-MUD/CoffeeMud/issues/59)

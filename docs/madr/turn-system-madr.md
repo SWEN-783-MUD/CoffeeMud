@@ -1,73 +1,105 @@
 ---
-# These are optional metadata elements. Feel free to remove any of them.
-status: "{proposed | rejected | accepted | deprecated | … | superseded by ADR-0123}"
-date: {YYYY-MM-DD when the decision was last updated}
-decision-makers: {list everyone involved in the decision}
-consulted: {list everyone whose opinions are sought (typically subject-matter experts); and with whom there is a two-way communication}
-informed: {list everyone who is kept up-to-date on progress; and with whom there is a one-way communication}
+status: accepted
+date: 2026-11-09
 ---
 
-# {short title, representative of solved problem and found solution}
+# Use Encounter-Owned Sequential Turns
 
 ## Context and Problem Statement
 
-{Describe the context and problem statement, e.g., in free form using two to three sentences or in the form of an illustrative story. You may want to articulate the problem in form of a question. Consider adding links to collaboration boards or issue management systems. Make the scope of the decision explicit, for instance, by calling out or pointing at structural architecture elements (components, connectors, ...).}
+CoffeeMUD's native combat progresses through MOB ticks, opponent relationships, commands, and messages. Milestone 1 needs sequential multiplayer turns with a three-action budget, bounded waiting, and consistent behavior for player commands, NPCs, and timeouts.
 
-<!-- This is an optional element. Feel free to remove. -->
+An encounter must own combat timing and resources while CoffeeMUD rooms continue to provide location and message validation. Turn legality must not depend on native MOB action credits or automatic attacks.
+
 ## Decision Drivers
 
-* {decision driver 1, for instance, a desired software quality, faced concern, constraint or force}
-* {decision driver 2}
-* … <!-- numbers of drivers can vary -->
+- Give one encounter authority over initiative, rounds, turns, and resources.
+- Process player, NPC, and timeout actions through the same validation rules.
+- Support split parties without indefinite waiting or free preparation actions.
+- Keep informational commands available while combat actions are restricted.
+- Prevent rejected, duplicate, or stale requests from changing later turns.
 
 ## Considered Options
 
-* {title of option 1}
-* {title of option 2}
-* {title of option 3}
-* … <!-- numbers of options can vary -->
+- Retain native tick-based automatic combat.
+- Give each MOB an independent turn scheduler.
+- Collect complete turns and resolve them simultaneously.
+- Let an encounter coordinate sequential participant turns.
 
 ## Decision Outcome
 
-Chosen option: "{title of option 1}", because {justification. e.g., only option, which meets k.o. criterion decision driver | which resolves force {force} | … | comes out best (see below)}.
+Chosen option: encounter-owned sequential turns. A room's EncounterManager coordinates admission and the room's encounter; the encounter owns participant order, rounds, the active participant, and combat resources. Milestone 1 supports one ongoing encounter in the test dungeon. Dungeon-wide enforcement must coordinate room managers; a room slot alone does not enforce that limit.
 
-<!-- This is an optional element. Feel free to remove. -->
+CoffeeMUD messages remain the boundary for location validation and dispatch. Native automatic attacks, damage, and command processing must not independently advance encounter combat.
+
+### Alignment with the Epics
+
+[Encounter Management (#14)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/14) establishes room-managed encounters, initially one player against one NPC. [Epic 3 (#39)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39) extends that foundation to the milestone's multiplayer encounter. The one-encounter test-dungeon limit is milestone scope, not a requirement that the entire server share one encounter.
+
+[Round and Turn Management (#22)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/22) covers initiative, rounds, turns, actions, and reactions. [Action Queue (#10)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/10) establishes prerequisite checks and action results. The lifecycle below follows those responsibilities. Reaction support remains part of the broader design, but [MUD-3.4.1 (#55)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/55) explicitly defers reactions and advanced action types beyond Milestone 1.
+
+### Lifecycle and Setup
+
+Use `PENDING`, `ACTIVE`, `AWAITING_RESCUE`, and terminal `COMPLETED` states.
+
+- An opening attack starts setup before damage or action costs resolve. It grants no free attack and is not automatically replayed.
+- Eligible party members already present become initial participants. Other rooms' party members are not enrolled automatically.
+- When nearby eligible party members can respond, a configurable joining window defaults to 15 seconds. If all eligible members are already present, setup proceeds without the countdown.
+- Already-enrolled participants cannot attack, move, change equipment or exploration activity, or otherwise prepare during pending setup. Map, status, help, and chat remain available without action costs.
+- Arrivals before the fixed joining deadline join the initial set. Arrivals at or after it follow late-participation rules. Repeated triggers and arrivals do not extend the deadline.
+- Finalize starting positions, detection, and initiative before ordinary turns begin.
+
+### Rounds and Turns
+
+- Activation begins round one. Use the initiative order supplied by setup, with a documented deterministic tie-breaker.
+- Track the active participant. Only that participant may perform turn-bound actions or voluntarily end the turn.
+- Each eligible participant receives three actions at turn start. Unused actions do not carry forward, and attack and diagonal movement counts reset for the new turn.
+- Turn-start and turn-end processing occur once at their respective boundaries. Spending the last action, voluntarily ending, becoming unable to act, or finishing timeout handling ends the turn.
+- Skip defeated NPCs and unconscious players without waiting for input or performing timeout actions.
+- After the final eligible participant finishes, advance the round and begin with the first eligible participant.
+- Late participants become eligible at the next round boundary without interrupting an existing turn.
+- Pending, awaiting-rescue, and completed encounters cannot advance ordinary combat turns.
+
+### Actions and Timeouts
+
+Individual commands resolve as they are processed; planning and submitting a complete turn is outside Milestone 1. Actions follow `pre_use`, `execute`, and `post_use`: validate current legality, apply effects and costs once, then check turn or encounter progression.
+
+Resolution is serialized. Revalidate actor eligibility, turn ownership, remaining resources, targets, and parameters immediately before execution. Invalid requests explain the failure without consuming actions or changing combat state. Informational commands do not spend actions.
+
+Queued requests belong to their originating encounter, participant, and turn. Finished-turn requests cannot execute in a later turn. Pause or completion discards pending requests instead of replaying them. The mechanism for associating requests with turns remains an implementation decision.
+
+Player turn limits are configurable. Commands accepted before the deadline resolve before timeout handling; commands accepted at or after the deadline are rejected as expired. Timeout preferences initially support End Turn and Raise Shield if possible. An unavailable fallback safely ends the turn. Repeated processing must not apply an action or end a turn twice.
+
+### Rescue and Completion
+
+When all enrolled players are unconscious and enemies remain, eligible conscious party members outside the encounter may receive a 15-second rescue window. Combat and ordinary turn timers pause while the rescue deadline continues in real time. The encounter still occupies the dungeon's encounter allowance.
+
+An eligible rescuer must arrive before the deadline through a valid room connection and receive a valid position. Successful rescue resumes at the next round boundary, preserving existing initiative order and incorporating the rescuer. It does not restart the opening joining window or wake unconscious participants.
+
+If rescue is unavailable or expires, complete the encounter in defeat. Victory and defeat apply their respective recovery and reset policies from the combat-ruleset MADR. Completion cleans up runtime encounter state while preserving authored room terrain. Duplicate events cannot reopen a completed encounter.
+
 ### Consequences
 
-* Good, because {positive consequence, e.g., improvement of one or more desired qualities, …}
-* Bad, because {negative consequence, e.g., compromising one or more desired qualities, …}
-* … <!-- numbers of consequences can vary -->
+- Good, because turn legality and resource changes have a single authority.
+- Good, because the same action lifecycle serves players, NPCs, and timeout behavior.
+- Good, because independent setup, turn, and rescue deadlines can be tested at exact boundaries.
+- Bad, because native combat paths require deliberate interception and isolation.
+- Bad, because request ordering, eligibility, late joining, and cleanup need explicit handling.
 
-<!-- This is an optional element. Feel free to remove. -->
 ### Confirmation
 
-{Describe how the implementation / compliance of the ADR can/will be confirmed. Is there any automated or manual fitness function? If so, list it and explain how it is applied. Is the chosen design and its implementation in line with the decision? E.g., a design/code review or a test with a library such as ArchUnit can help validate this. Note that although we classify this element as optional, it is included in many ADRs.}
+Verify round-one activation, fixed turn order, round wraparound, three-action refresh, per-turn resets, and rejection of out-of-turn actions. Exercise empty or ineligible participant sets so progression cannot loop indefinitely.
 
-<!-- This is an optional element. Feel free to remove. -->
-## Pros and Cons of the Options
+Test duplicate End Turn requests and stale timeout events, including events arriving during a later turn of the same participant. Test command acceptance immediately before and at deadlines, failed validation without resource changes, and serialized resolution without double application.
 
-### {title of option 1}
+Check joining and rescue deadlines without relying on long real-time sleeps. Confirm that pending and paused participants cannot prepare or act, late arrivals wait for the correct boundary, completed encounters remain terminal, and native combat cannot apply extra attacks or damage outside the encounter. These are design validation targets; the current implementation is incremental.
 
-<!-- This is an optional element. Feel free to remove. -->
-{example | description | pointer to more information | …}
-
-* Good, because {argument a}
-* Good, because {argument b}
-<!-- use "neutral" if the given argument weights neither for good nor bad -->
-* Neutral, because {argument c}
-* Bad, because {argument d}
-* … <!-- numbers of pros and cons can vary -->
-
-### {title of other option}
-
-{example | description | pointer to more information | …}
-
-* Good, because {argument a}
-* Neutral, because {argument b}
-* Bad, because {argument c}
-* …
-
-<!-- This is an optional element. Feel free to remove. -->
 ## More Information
 
-{You might want to provide additional evidence/confidence for the decision outcome here and/or document the team agreement on the decision and/or define when/how this decision the decision should be realized and if/when it should be re-visited. Links to other decisions and resources might appear here as well.}
+- [Combat ruleset](pathfinder2e-madr.md)
+- [Positional combat](positional-combat-madr.md)
+- [Epic 3: Unstructured Encounter Lifecycle](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39)
+- [MUD-3.2: Party Notifications & Encounter Joining Window](https://github.com/SWEN-783-MUD/CoffeeMud/issues/41)
+- [MUD-3.4.2: Action Queue & Resolution](https://github.com/SWEN-783-MUD/CoffeeMud/issues/56)
+- [MUD-3.4.3: Round & Turn Management](https://github.com/SWEN-783-MUD/CoffeeMud/issues/57)
+- [MUD-3.10: Party Rescue Window & Defeat](https://github.com/SWEN-783-MUD/CoffeeMud/issues/49)
