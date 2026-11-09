@@ -967,8 +967,9 @@ public interface DatabaseEngine extends CMLibrary
 	 * exist!
 	 * @param oldName the previous existing name in the db
 	 * @param newName the new name to change them to
+	 * @return whether the primary character row changed
 	 */
-	public void DBPlayerNameChange(String oldName, String newName);
+	public boolean DBPlayerNameChange(String oldName, String newName);
 
 	/**
 	 * Table category: DBPLAYERS
@@ -1099,8 +1100,9 @@ public interface DatabaseEngine extends CMLibrary
 	 * other methods for that.  This just does in the char
 	 * record and clan affiliation.
 	 * @param mobName the mob to delete
+	 * @return whether the primary character row was removed
 	 */
-	public void DBDeletePlayerOnly(String mobName);
+	public boolean DBDeletePlayerOnly(String mobName);
 
 	/**
 	 * Table category: DBPLAYERS

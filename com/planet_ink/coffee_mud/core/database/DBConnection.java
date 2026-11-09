@@ -568,6 +568,33 @@ public class DBConnection
 	public int update(final String updateString, final int retryNum)
 		throws SQLException
 	{
+		return update(updateString, retryNum, true);
+	}
+
+	/**
+	 * Runs a write whose result must be handled by the caller before any retry.
+	 *
+	 * @param updateString the SQL update to execute
+	 * @return the affected row count, or a negative value if the connection could not run it
+	 * @throws SQLException if the write fails
+	 */
+	int updateOnce(final String updateString) throws SQLException
+	{
+		return update(updateString, 0, false);
+	}
+
+	/**
+	 * Executes a write and optionally queues a failed statement for retry.
+	 *
+	 * @param updateString the SQL update to execute
+	 * @param retryNum how many times the queued statement has been retried
+	 * @param queueOnFailure whether this statement can run again later on its own
+	 * @return the affected row count, or a negative value if the connection could not run it
+	 * @throws SQLException if the write fails
+	 */
+	private int update(final String updateString, final int retryNum, final boolean queueOnFailure)
+		throws SQLException
+	{
 		lastSQL=updateString;
 		int responseCode=-1;
 		if((inUse)&&(ready()))
@@ -602,7 +629,7 @@ public class DBConnection
 				}
 				else
 					Log.errOut(updateString+": "+sqle);
-				if((myParent!=null) && (myStatement != null))
+				if(queueOnFailure && (myParent!=null) && (myStatement != null))
 					myParent.enQueueError(updateString,""+sqle,""+(retryNum+1));
 				if(isProbablyDead())
 				{
