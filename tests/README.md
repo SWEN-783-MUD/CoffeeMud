@@ -1,29 +1,41 @@
 # Automated CoffeeMud tests
 
-From the repository root, with JDK 17 and Python 3.9 or newer installed:
+Run this from the repository root with JDK 17 and Python 3.9 or newer.
 
 ```text
-python tests/run_tests.py --verify-harness
+python tests/run_tests.py --group party --verify-harness
 ```
 
-No Python packages or Ant installation are needed. Set `JAVA_HOME` to your JDK 17 directory, or put its `java` and `javac` on PATH.
+The launcher uses Python's standard library and calls `javac` directly. Set
+`JAVA_HOME` to your JDK 17 directory or put its `java` and `javac` on PATH.
 
-The launcher compiles fresh classes with the project's Java 8 source/target settings. It runs `PartyMembershipTest` and `PartyCommandTest` standalone, then starts CoffeeMud and runs the registered `party` test group. It also checks that a temporary Archon character can discover those tests through the real `TEST LIST` command.
+## How a run works
 
-The host runner calls the same `CMTest.doTest` methods as the in-game `TEST` command. A null result passes. A failure message, exception, cleanup failure, or timeout fails the run. The command's boolean return value is not a test verdict, so the runner collects the test results directly.
+1. `run_tests.py` creates a fresh server folder and compiles the project with its Java 8 source and target settings.
+2. The launcher runs `PartyMembershipTest` and `PartyCommandTest` as standalone checks before it starts the server.
+3. `HostTestRunner.java` boots CoffeeMud, checks that a temporary Archon can use `TEST LIST`, and runs the selected tests.
+4. The runner saves its report and shuts down the server. The launcher checks the report and process exit code.
 
-## What the fixture creates
+The runner calls the same `CMTest.doTest` methods as the in-game `TEST` command.
+A `null` result passes. A failure message, thrown error, cleanup failure, or
+timeout fails the run. Reading `doTest` results directly gives the launcher a
+pass or fail for each test.
 
-Each invocation gets a new directory under ignored `test-output/`:
+## Temporary server files
 
-- A fresh FakeDB containing only the supplied schema before boot. Existing local player records are excluded.
-- Copies of the engine resources and configuration with optional network services disabled.
-- A loopback listener on an available port. This is separate from the local demo server.
-- A temporary room, player character, and recording session for each host test. These are created through Java and are not saved as player accounts.
+Each run gets a folder under `test-output/`. CoffeeMud starts with a fresh
+FakeDB made from the supplied schema and builds its default world. The launcher
+copies the assets and config it needs, binds the host to loopback on an available
+port, and turns off optional network services.
 
-CoffeeMud creates its default empty-database world during boot. Tests needing additional rooms, players, or content should create and clean up their own fixtures. Start with a known test group; legacy `all` includes tests with other setup requirements.
+The runner creates a temporary room, Archon, and recording session for each host
+test. Tests that need more rooms, players, or items create and clean up those
+objects themselves.
 
-Results and logs are retained in that run's directory. Successful runs remove their disposable runtime directory. Failed runs retain it for debugging. Use `--keep-runtime` to retain a successful runtime too.
+Each run keeps its logs and report. The launcher removes the server folder after
+a pass and keeps it after a failure. Use `--keep-runtime` to keep it after a pass.
+
+## Choose what to run
 
 ```text
 python tests/run_tests.py --group party
@@ -31,19 +43,30 @@ python tests/run_tests.py --test PartyCommandTest
 python tests/run_tests.py --test FormationTest --keep-runtime
 ```
 
-Group names and test IDs are matched exactly, ignoring case. An unknown or empty selection fails. The two fast party fixtures run before any selected host suite.
+Use `--group` or `--test` to pick one group or test ID. The default group is
+`party`. Names match exactly, ignoring case, and a selection with no matches
+fails the run. Some legacy groups include tests that need extra setup.
 
-Use `--skip-standalone` to run only the registered host selection. This lets another epic reuse the host harness without depending on the standalone party fixtures.
+Use `--skip-standalone` to run the host selection by itself. This is useful when
+checking a built-in test or using the runner from another epic.
 
 ## Failure handling
 
-`--verify-harness` checks pass/fail aggregation, exception handling, cleanup, cancellation, and empty selections. It also launches a deliberate failing test in a separate process and requires exit status 1. Expected exception traces in `harness-contracts.log` come from these negative checks.
+`--verify-harness` checks how the runner handles failures, cleanup, timeouts,
+and empty selections. It runs a deliberate failure in a separate process and
+expects exit status 1. Those checks produce the expected exception traces in
+`harness-contracts.log`.
 
-Each registered test has a 30-second default deadline. Host startup has a 120-second deadline, and the entire host process has a 240-second deadline. Override these with `--test-timeout`, `--startup-timeout`, and `--timeout`. A timed-out test stops the suite because it may still hold world state. The outer launcher kills the Java process if it exceeds the whole-process deadline.
+Each registered test has 30 seconds by default. The host has 120 seconds to
+start, and the full host process has 240 seconds. Adjust these with
+`--test-timeout`, `--startup-timeout`, and `--timeout`, all in seconds. The
+runner stops the suite when a test times out because its worker may still use
+the world. The launcher ends the Java process if it exceeds the full deadline.
 
-The host runner writes `results.xml` in JUnit format. The launcher requires a nonempty, consistent report as well as a successful process exit. Startup failure or a missing report cannot produce a green result.
+The host runner writes a JUnit XML report at `results.xml`. A pass requires a
+successful process exit and a complete report with at least one check.
 
-Run the launcher's own regression checks with:
+Run the launcher checks on their own with this command.
 
 ```text
 python -m unittest discover -s tests -p test_launcher.py -v
@@ -51,6 +74,16 @@ python -m unittest discover -s tests -p test_launcher.py -v
 
 ## GitHub Actions
 
-`test-coffeemud.yaml` runs the same commands on pushes, pull requests, and manual runs, using Windows, JDK 17, and Python 3.13. Logs and XML results are uploaded even after a failed test step. It is separate from the existing distribution/release workflow.
+`test-coffeemud.yaml` runs the launcher on pushes, pull requests, and manual
+runs with Windows, JDK 17, and Python 3.13. The workflow selects `party` and
+uploads the available logs and XML even when a test fails.
 
-To add coverage, write a `StdTest` with a `getTestGroups()` category and add your assertions to `doTest`. Existing tests remain available through `TEST <group>` in-game. Keep socket login, reconnect, and client rendering checks separate from this programmatic test context.
+## Add a test
+
+Create a `StdTest` in CoffeeMud's `Tests` package. List its groups in
+`getTestGroups()` and put the setup and assertions in `doTest()`. Tests added to
+`party` run on the next CI build and through `TEST PARTY` in-game. To run a
+separate group in CI, add a launcher call that selects it with `--group`.
+
+Use real rooms, characters, and game commands when the test needs to check a
+game mechanic. Login, reconnect, and browser checks need a client test driver.
