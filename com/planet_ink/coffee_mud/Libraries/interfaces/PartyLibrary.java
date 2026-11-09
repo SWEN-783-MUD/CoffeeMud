@@ -1,5 +1,6 @@
 package com.planet_ink.coffee_mud.Libraries.interfaces;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -10,6 +11,7 @@ import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.ExplorationContext;
 import com.planet_ink.coffee_mud.core.party.ExplorationContext.Activity;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Arrival;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
 /** Connects CoffeeMud's player commands to party state for the current server run. */
@@ -35,6 +37,31 @@ public interface PartyLibrary extends CMLibrary
 	 * @return whether the actor has player stats
 	 */
 	public boolean isPlayerCharacter(MOB character);
+
+	/**
+	 * Checks native combat and enrollment in the character's room encounter.
+	 *
+	 * @param player the actor attempting a player command
+	 * @return whether the command's combat restrictions apply
+	 */
+	public boolean isCombatRestricted(MOB player);
+
+	/**
+	 * Publishes an encounter change under the same lock as party commands and player travel.
+	 * The change may read party state, but must not send room messages.
+	 *
+	 * @param change the room manager's checked state change
+	 * @return whether the change succeeded
+	 */
+	public boolean commitEncounterChange(BooleanSupplier change);
+
+	/**
+	 * Looks up a character's other online party members from the current roster.
+	 *
+	 * @param player the character whose roster to read
+	 * @return a fixed list of online teammates at the time of the lookup
+	 */
+	public List<MOB> onlinePartyMembers(MOB player);
 
 	/** The result of choosing an exploration activity. */
 	public enum ActivitySelection
@@ -197,9 +224,17 @@ public interface PartyLibrary extends CMLibrary
 	 * @param step the character about to enter
 	 * @param destination the room approved by the native move
 	 * @param entrySide the known return direction, or {@link ExplorationContext#UNKNOWN_ENTRY}
-	 * @return the context captured at placement, or null if the step was refused
+	 * @return the arrival captured at placement, or null if the step was refused
 	 */
-	public ExplorationContext arriveTravel(Step step, Room destination, int entrySide);
+	public Arrival arriveTravel(Step step, Room destination, int entrySide);
+
+	/**
+	 * Rechecks a completed arrival before the encounter uses it.
+	 *
+	 * @param arrival the placement captured by the travel batch
+	 * @return whether the same session still occupies that placement
+	 */
+	public boolean isCurrentArrival(Arrival arrival);
 
 	/**
 	 * Restores source room membership after an interrupted step if the same

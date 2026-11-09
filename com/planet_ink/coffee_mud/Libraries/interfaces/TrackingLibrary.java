@@ -779,6 +779,14 @@ public interface TrackingLibrary extends CMLibrary
 	public boolean isPartyTravelArrival(CMMsg message);
 
 	/**
+	 * Checks for open command travel, including from a separate combat thread.
+	 *
+	 * @param player the character whose exit is being resolved
+	 * @return whether any open travel batch includes the character
+	 */
+	public boolean isPartyTravelInProgress(MOB player);
+
+	/**
 	 *
 	 * Causes the given mob to attempt to walk in the given direction.
 	 *

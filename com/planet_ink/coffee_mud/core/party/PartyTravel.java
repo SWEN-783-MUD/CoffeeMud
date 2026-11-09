@@ -83,18 +83,27 @@ public final class PartyTravel
 		public final int entrySide;
 		/** The player's activity and approach at the time they entered the room. */
 		public final ExplorationContext exploration;
+		/** The session that actually traveled. */
+		public final Session session;
+		/** The player's position revision after placement. */
+		public final long positionRevision;
 
 		/**
 		 * Records a committed room entry.
 		 *
 		 * @param player the character who arrived
 		 * @param characterKey the character's key at arrival
+		 * @param session the session that entered
+		 * @param positionRevision the player's position revision at placement
 		 * @param exploration the fixed exploration context from placement
 		 */
-		public Arrival(final MOB player, final String characterKey, final ExplorationContext exploration)
+		public Arrival(final MOB player, final String characterKey, final Session session,
+				final long positionRevision, final ExplorationContext exploration)
 		{
 			this.player = player;
 			this.characterKey = characterKey;
+			this.session = session;
+			this.positionRevision = positionRevision;
 			this.exploration = exploration;
 			this.entrySide = exploration.entrySide;
 		}

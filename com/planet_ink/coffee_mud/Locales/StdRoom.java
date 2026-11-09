@@ -757,10 +757,19 @@ public class StdRoom implements Room
 	{
 		if(!getArea().okMessage(this,msg))
 			return false;
+		final EncounterManager manager = getEncounterManager();
+		if(msg.targetMajor(CMMsg.MASK_MALICIOUS) && (msg.target() instanceof MOB) && manager.isEnabled())
+		{
+			final MOB target = (MOB)msg.target();
+			// Native hostility must wait for all branches, and for the encounter owner once enrolled.
+			if(CMLib.tracking().isPartyTravelInProgress(target) || manager.restricts(target)
+			|| manager.restricts(msg.source()))
+				return false;
+		}
 		if(msg.targetMinor()==CMMsg.TYP_ENC_BEGIN)
 		{
 			if((!(msg.target() instanceof MOB))
-			||(!getEncounterManager().canStartEncounter(msg.source(),(MOB)msg.target())))
+			||(!manager.canStartEncounter(msg.source(),(MOB)msg.target())))
 				return false;
 		}
 

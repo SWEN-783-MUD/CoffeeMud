@@ -29,7 +29,7 @@ public class Unfollow extends StdCommand
 		}
 
 		final MOB target = mob.amFollowing();
-		if(mob.isPlayer() && (target != null) && target.isPlayer() && mob.isInCombat())
+		if(mob.isPlayer() && (target != null) && target.isPlayer() && CMLib.parties().isCombatRestricted(mob))
 			mob.tell(L("Wait until combat ends before changing who you follow."));
 		else
 			CMLib.commands().postFollow(mob,null,false);

@@ -10,16 +10,23 @@ import java.util.Objects;
  */
 public class GeneralEncounter implements Encounter
 {
+	/** Phases owned by the room encounter. */
 	public enum State
 	{
+		/** The participants have been selected and setup is in progress. */
 		PENDING,
+		/** The encounter has finished setup. */
 		ACTIVE,
+		/** Reserved for the encounter owner's rescue rules. */
 		AWAITING_RESCUE,
+		/** The encounter has ended. */
 		COMPLETED
 	}
 
+	/** Fixed roster captured when the room opens the encounter. */
 	private final List<EncounterParticipant> participants;
-	private State state=State.PENDING;
+	/** Phase reads must be safe while the party library holds its character lock. */
+	private volatile State state=State.PENDING;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -38,7 +45,7 @@ public class GeneralEncounter implements Encounter
 	/**
 	 * @return the encounter's current lifecycle state
 	 */
-	public synchronized State getState()
+	public State getState()
 	{
 		return state;
 	}
@@ -48,7 +55,7 @@ public class GeneralEncounter implements Encounter
 	 *
 	 * @return true if the encounter moved from pending to active
 	 */
-	public synchronized boolean activate()
+	synchronized boolean activate()
 	{
 		if(state!=State.PENDING)
 			return false;
@@ -61,7 +68,7 @@ public class GeneralEncounter implements Encounter
 	 *
 	 * @return true if the encounter moved from active to completed
 	 */
-	public synchronized boolean complete()
+	synchronized boolean complete()
 	{
 		if(state!=State.ACTIVE)
 			return false;

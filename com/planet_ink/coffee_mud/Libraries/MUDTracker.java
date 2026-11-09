@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.ProtocolLibrary.InProto;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.RFilter;
@@ -61,6 +62,9 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 
 	/** The entry message covered by a batch on the current movement thread. */
 	private final ThreadLocal<CMMsg> travelArrival = new ThreadLocal<CMMsg>();
+
+	/** Open movement batches per player, also visible to combat and NPC ticks. */
+	private final Map<MOB, Integer> openTravel = new ConcurrentHashMap<MOB, Integer>();
 
 	/** Collects committed arrivals and failures for one independent command. */
 	private static final class TravelBatch
@@ -1715,11 +1719,37 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		final Step root = parties.captureTravel(mob);
 		if(root == null)
 			return false;
+
 		final TravelBatch batch = new TravelBatch(parties);
-		final boolean moved = move(mob,directionCode,false,false,false,false,running,batch,root);
-		if(moved && (batch.destination != null))
-			publishTravel(new Completed(root.source,batch.destination,directionCode,batch.arrivals,batch.failures));
-		return moved;
+		markTravel(root,true);
+		try
+		{
+			final boolean moved = move(mob,directionCode,false,false,false,false,running,batch,root);
+			if(moved && (batch.destination != null))
+				publishTravel(new Completed(root.source,batch.destination,directionCode,batch.arrivals,batch.failures));
+			return moved;
+		}
+		finally
+		{
+			markTravel(root,false);
+		}
+	}
+
+	/**
+	 * Marks the captured tree before its first entry and clears it even after a failed move.
+	 *
+	 * @param step the current part of the captured tree
+	 * @param opening whether the batch is starting or closing
+	 */
+	private void markTravel(final Step step, final boolean opening)
+	{
+		if(opening)
+			openTravel.merge(step.player,Integer.valueOf(1),(first, second) -> Integer.valueOf(first.intValue() + 1));
+		else
+			openTravel.computeIfPresent(step.player,(player, count) ->
+					count.intValue() == 1 ? null : Integer.valueOf(count.intValue() - 1));
+		for(final Step child : step.children)
+			markTravel(child,opening);
 	}
 
 	/** {@inheritDoc} */
@@ -1737,6 +1767,13 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return (message != null) && (travelArrival.get() == message);
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public boolean isPartyTravelInProgress(final MOB player)
+	{
+		return openTravel.containsKey(player);
+	}
+
 	/**
 	 * Delivers the completed snapshot after room callbacks and follow processing.
 	 * A listener failure cannot turn an already committed move into a failed one.
@@ -1745,6 +1782,19 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 	 */
 	private void publishTravel(final Completed completed)
 	{
+		final EncounterManager manager = completed.destination.getEncounterManager();
+		if(manager != null)
+		{
+			try
+			{
+				manager.onPartyTravelCompleted(completed);
+			}
+			catch(final RuntimeException error)
+			{
+				Log.errOut(ID(),error);
+			}
+		}
+
 		for(final Consumer<Completed> listener : travelListeners)
 		{
 			try
@@ -2064,15 +2114,15 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 			return false;
 
 		final Room destination;
-		final ExplorationContext exploration;
+		final Arrival arrival;
 		try
 		{
 			step.source.send(step.player,leaveMsg);
 			destination = enterMsg.target() instanceof Room ? (Room)enterMsg.target() : null;
 			final int entrySide = destination == null
 					? ExplorationContext.UNKNOWN_ENTRY : arrivalSide(step.source,destination,suggestedSide);
-			exploration = batch.parties.arriveTravel(step,destination,entrySide);
-			if(exploration == null)
+			arrival = batch.parties.arriveTravel(step,destination,entrySide);
+			if(arrival == null)
 			{
 				if(step.parent == null)
 					step.player.tell(L("You can't go that way."));
@@ -2092,7 +2142,7 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		}
 		if(step.parent == null)
 			batch.destination = destination;
-		batch.arrivals.add(new Arrival(step.player,CMStrings.capitalizeAndLower(step.player.Name()),exploration));
+		batch.arrivals.add(arrival);
 
 		// An encounter handler receiving this native message can wait for the completed batch.
 		final CMMsg previous = travelArrival.get();

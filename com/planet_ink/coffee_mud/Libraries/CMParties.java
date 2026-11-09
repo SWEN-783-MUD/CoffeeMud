@@ -15,6 +15,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Common.interfaces.Session;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary;
@@ -35,6 +36,7 @@ import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingStatus;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingView;
 import com.planet_ink.coffee_mud.core.party.PartyStore.TransferResult;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Arrival;
 import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
 /** Handles live players and feedback around the party store's membership rules. */
@@ -130,6 +132,52 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
+	public boolean isCombatRestricted(final MOB player)
+	{
+		if(player.isInCombat())
+			return true;
+
+		final Room room = player.location();
+		final EncounterManager manager = room == null ? null : room.getEncounterManager();
+		return (manager != null) && manager.restricts(player);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean commitEncounterChange(final BooleanSupplier change)
+	{
+		synchronized(characterLock)
+		{
+			return change.getAsBoolean();
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public List<MOB> onlinePartyMembers(final MOB player)
+	{
+		synchronized(characterLock)
+		{
+			final PartySnapshot party = findParty(player);
+			if(party == null)
+				return Collections.emptyList();
+
+			final String ownKey = characterKey(player);
+			final List<MOB> members = new ArrayList<MOB>();
+			for(final String key : party.getMembers())
+			{
+				if(key.equals(ownKey))
+					continue;
+				final MOB member = findOnlinePlayer(key);
+				if((member != null) && !departingFollowers.contains(member))
+					members.add(member);
+			}
+			return Collections.unmodifiableList(members);
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
 	public ExplorationContext explorationContext(final MOB player)
 	{
 		synchronized(characterLock)
@@ -146,7 +194,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		{
 			if(!canUseCharacter(player) || departingFollowers.contains(player) || (activity == null))
 				return ActivitySelection.UNAVAILABLE;
-			if(player.isInCombat())
+			if(isCombatRestricted(player))
 				return ActivitySelection.IN_COMBAT;
 
 			travelState(player).selectActivity(activity);
@@ -408,7 +456,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
-	public ExplorationContext arriveTravel(final Step step, final Room destination, final int entrySide)
+	public Arrival arriveTravel(final Step step, final Room destination, final int entrySide)
 	{
 		synchronized(characterLock)
 		{
@@ -420,7 +468,22 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				step.player.setFollowing(null);
 			placeFromExit(step.player,destination,entrySide);
 			destination.addInhabitant(step.player);
-			return travelState(step.player).snapshot(destination);
+			final CharacterTravelState state = travelState(step.player);
+			return new Arrival(step.player,characterKey(step.player),step.session,state.position,state.snapshot(destination));
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean isCurrentArrival(final Arrival arrival)
+	{
+		synchronized(characterLock)
+		{
+			final MOB player = arrival.player;
+			final Room room = arrival.exploration.room;
+			return canStartFollowing(player) && (player.session() == arrival.session)
+					&& (player.location() == room) && room.isInhabitant(player)
+					&& (travelState(player).position == arrival.positionRevision);
 		}
 	}
 
@@ -517,7 +580,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		final PartySnapshot party = store.findByMember(characterKey(follower));
 		if((party == null) || !party.getMembers().contains(characterKey(target)))
 			return FollowResult.NOT_PARTY;
-		if(follower.isInCombat())
+		if(isCombatRestricted(follower))
 			return FollowResult.IN_COMBAT;
 		if(follower.amFollowing() == target)
 			return FollowResult.ALREADY_FOLLOWING;
@@ -624,13 +687,14 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public CreateResult createParty(final MOB character)
 	{
-		if(!isPlayerCharacter(character))
-			return CreateResult.NOT_PLAYER;
-		if(character.isInCombat())
-			return CreateResult.IN_COMBAT;
-		final CreateResult result = withCharacter(character, key -> store.create(key) == null
-				? CreateResult.ALREADY_MEMBER : CreateResult.CREATED);
-		return result == null ? CreateResult.NOT_PLAYER : result;
+		synchronized(characterLock)
+		{
+			if(!canUseCharacter(character))
+				return CreateResult.NOT_PLAYER;
+			if(isCombatRestricted(character))
+				return CreateResult.IN_COMBAT;
+			return store.create(characterKey(character)) == null ? CreateResult.ALREADY_MEMBER : CreateResult.CREATED;
+		}
 	}
 
 	/** {@inheritDoc} */
@@ -654,16 +718,13 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void transferLeadership(final MOB leader, final String memberName)
 	{
-		if(!canManageParty(leader))
-			return;
-
 		// Match a roster key so a disconnected member can still take over.
 		final String memberKey = CMStrings.capitalizeAndLower(memberName);
 		final TransferResult result;
 		final MOB newLeader;
 		synchronized(characterLock)
 		{
-			if(!canUseCharacter(leader))
+			if(!canManageParty(leader))
 				return;
 			result = store.transferLeadership(characterKey(leader), memberKey);
 			newLeader = result == TransferResult.TRANSFERRED ? findOnlinePlayer(memberKey) : null;
@@ -696,14 +757,11 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void sendInvitation(final MOB sender, final String recipientName)
 	{
-		if(!canManageParty(sender))
-			return;
-
 		final MOB recipient;
 		final PendingResult result;
 		synchronized(characterLock)
 		{
-			if(!canUseCharacter(sender))
+			if(!canManageParty(sender))
 				return;
 
 			// Check the sender before looking up another player.
@@ -761,14 +819,11 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void requestJoin(final MOB candidate, final String leaderName)
 	{
-		if(!canManageParty(candidate))
-			return;
-
 		final MOB leader;
 		final PendingResult result;
 		synchronized(characterLock)
 		{
-			if(!canUseCharacter(candidate))
+			if(!canManageParty(candidate))
 				return;
 
 			// Keep the online lookup and entry creation on the same names.
@@ -871,7 +926,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			}
 		}
 
-		if(character.isInCombat())
+		if(isCombatRestricted(character))
 			character.tell(L("You can act on pending entries after combat if they are still open."));
 	}
 
@@ -879,26 +934,25 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void acceptInvitation(final MOB character, final long invitationId)
 	{
-		if(canManageParty(character))
+		final JoinResult result;
+		synchronized(characterLock)
 		{
-			final JoinResult result = withCharacter(character, key -> store.acceptInvitation(key, invitationId));
-			if(result != null)
-				reportJoinResult(character, result, Type.INVITATION, null);
+			if(!canManageParty(character))
+				return;
+			result = store.acceptInvitation(characterKey(character),invitationId);
 		}
+		reportJoinResult(character, result, Type.INVITATION, null);
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void approveRequest(final MOB leader, final long requestId)
 	{
-		if(!canManageParty(leader))
-			return;
-
 		final JoinResult result;
 		final MOB candidate;
 		synchronized(characterLock)
 		{
-			if(!canUseCharacter(leader))
+			if(!canManageParty(leader))
 				return;
 			result = store.approveRequest(characterKey(leader), requestId);
 
@@ -932,14 +986,11 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	 */
 	private void closePendingEntry(final MOB actor, final long entryId, final boolean declined)
 	{
-		if(!canManageParty(actor))
-			return;
-
 		final PendingView closed;
 		final MOB other;
 		synchronized(characterLock)
 		{
-			if(!canUseCharacter(actor))
+			if(!canManageParty(actor))
 				return;
 			final String actorKey = characterKey(actor);
 			closed = declined ? store.decline(actorKey, entryId) : store.cancel(actorKey, entryId);
@@ -1025,7 +1076,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	}
 
 	/**
-	 * Checks the actor before a party management command changes state.
+	 * Checks the actor with characterLock held so encounter opening and the command cannot cross.
 	 *
 	 * @param character the actor trying to make the change
 	 * @return whether the player can make the change now
@@ -1038,8 +1089,10 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				character.tell(L("Only player characters can use parties."));
 			return false;
 		}
+		if(!canUseCharacter(character))
+			return false;
 
-		if(character.isInCombat())
+		if(isCombatRestricted(character))
 		{
 			character.tell(L("Wait until combat ends before using that party command."));
 			return false;
