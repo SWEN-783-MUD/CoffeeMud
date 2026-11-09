@@ -10,7 +10,7 @@ import com.planet_ink.coffee_mud.Combat.GeneralEncounter;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMProps;
 
-/** Verifies current participant tracking across encounter lifecycle changes. */
+/** Verifies participant turn order, round progression, and lifecycle guards. */
 public class EncounterTurnTest extends StdTest
 {
 	@Override
@@ -44,10 +44,17 @@ public class EncounterTurnTest extends StdTest
 		// MOB interface initialization needs tick configuration in standalone runs.
 		new CMProps();
 		runCases();
-		System.out.println("PASS: Encounter current participant.");
+		System.out.println("PASS: Encounter turn progression.");
 	}
 
 	private static void runCases()
+	{
+		participantLifecycle();
+		roundProgression();
+		singleParticipantRounds();
+	}
+
+	private static void participantLifecycle()
 	{
 		final EncounterParticipant first=participant();
 		final GeneralEncounter encounter=new GeneralEncounter(Arrays.asList(first,participant()));
@@ -66,6 +73,55 @@ public class EncounterTurnTest extends StdTest
 		final GeneralEncounter empty=new GeneralEncounter(Collections.<EncounterParticipant>emptyList());
 		check(empty.activate(),"Empty lifecycle fixtures must remain supported.");
 		checkNoTurn(empty);
+		check(!empty.endTurn(first)&&!empty.endTurn(null),"An empty encounter cannot advance a turn.");
+		check(empty.getRound()==1,"Rejected empty turn requests must not advance the round.");
+	}
+
+	private static void roundProgression()
+	{
+		final EncounterParticipant first=participant();
+		final EncounterParticipant second=participant();
+		final EncounterParticipant third=participant();
+		final GeneralEncounter encounter=new GeneralEncounter(Arrays.asList(first,second,third));
+		check(!encounter.endTurn(first),"Pending encounters must reject turn advancement.");
+		checkTurn(encounter,null,0);
+		check(encounter.activate(),"The encounter must activate.");
+		checkTurn(encounter,first,1);
+		check(!encounter.endTurn(second)&&!encounter.endTurn(participant())&&!encounter.endTurn(null),
+				"Only the active participant can end a turn.");
+		checkTurn(encounter,first,1);
+		check(encounter.endTurn(first),"The active participant must be able to end their turn.");
+		checkTurn(encounter,second,1);
+		check(!encounter.endTurn(first),"Repeating the previous participant's request must not skip another turn.");
+		checkTurn(encounter,second,1);
+		check(encounter.endTurn(second),"The next participant must be able to end their turn.");
+		checkTurn(encounter,third,1);
+		check(encounter.awaitRescue(),"The encounter must pause for rescue.");
+		check(!encounter.endTurn(third)&&!encounter.endTurn(first),"Awaiting rescue must block advancement.");
+		checkTurn(encounter,null,1);
+		check(encounter.resume(),"The encounter must resume.");
+		checkTurn(encounter,third,1);
+		check(encounter.endTurn(third),"The final participant must be able to end their turn.");
+		checkTurn(encounter,first,2);
+		check(encounter.endTurn(first),"The first participant must be able to act again in round two.");
+		checkTurn(encounter,second,2);
+		check(encounter.complete(),"The encounter must complete.");
+		check(!encounter.endTurn(second)&&!encounter.endTurn(first),"Completed encounters must block advancement.");
+		checkTurn(encounter,null,2);
+	}
+
+	private static void singleParticipantRounds()
+	{
+		final EncounterParticipant only=participant();
+		final GeneralEncounter encounter=new GeneralEncounter(Collections.singletonList(only));
+		check(encounter.activate()&&encounter.endTurn(only),"A single participant must be able to finish a round.");
+		checkTurn(encounter,only,2);
+	}
+
+	private static void checkTurn(final GeneralEncounter encounter, final EncounterParticipant participant, final int round)
+	{
+		check(encounter.getCurrentParticipant()==participant&&encounter.getRound()==round,
+				"The current participant and round must match the expected progression (round "+round+").");
 	}
 
 	private static EncounterParticipant participant()
