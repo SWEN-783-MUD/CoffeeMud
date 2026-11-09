@@ -30,7 +30,7 @@ public class GeneralEncounter implements Encounter
 	/** Phase reads must be safe while the party library holds its character lock. */
 	private volatile State state=State.PENDING;
 	private int round=0;
-	private EncounterParticipant currentParticipant;
+	private int currentParticipantIndex=-1;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -67,7 +67,27 @@ public class GeneralEncounter implements Encounter
 	 */
 	public synchronized EncounterParticipant getCurrentParticipant()
 	{
-		return (state==State.ACTIVE)?currentParticipant:null;
+		return ((state==State.ACTIVE)&&(currentParticipantIndex>=0))?participants.get(currentParticipantIndex):null;
+	}
+
+	/**
+	 * Ends the active participant's turn and advances in the supplied order.
+	 * Finishing the last participant's turn starts the next round.
+	 *
+	 * @param participant the participant requesting to end their current turn
+	 * @return true if the active turn ended, false if the request is not permitted
+	 */
+	public synchronized boolean endTurn(final EncounterParticipant participant)
+	{
+		if((state!=State.ACTIVE)||(participant==null)||(participant!=getCurrentParticipant()))
+			return false;
+		currentParticipantIndex++;
+		if(currentParticipantIndex==participants.size())
+		{
+			currentParticipantIndex=0;
+			round++;
+		}
+		return true;
 	}
 
 	/**
@@ -81,7 +101,7 @@ public class GeneralEncounter implements Encounter
 			return false;
 		round=1;
 		// Setup supplies the participant order; initiative rolling is separate.
-		currentParticipant=participants.isEmpty()?null:participants.get(0);
+		currentParticipantIndex=participants.isEmpty()?-1:0;
 		state=State.ACTIVE;
 		return true;
 	}
@@ -126,7 +146,7 @@ public class GeneralEncounter implements Encounter
 	{
 		if((state!=State.ACTIVE)&&(state!=State.AWAITING_RESCUE))
 			return false;
-		currentParticipant=null;
+		currentParticipantIndex=-1;
 		state=State.COMPLETED;
 		return true;
 	}
