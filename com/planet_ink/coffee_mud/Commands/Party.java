@@ -70,10 +70,14 @@ public class Party extends StdCommand
 			return false;
 		}
 
-		// Only INVITE and ACCEPT take another word after the action.
+		// Separate the commands that take a name or ID from those that take no argument.
 		final String action = commands.get(1).toUpperCase(Locale.ROOT);
-		final int wordCount = ("INVITE".equals(action) || "ACCEPT".equals(action)) ? 3 : 2;
-		if(commands.size() != wordCount)
+		if(commands.size() == 3)
+		{
+			executeWithArgument(mob, parties, action, commands.get(2));
+			return false;
+		}
+		if(commands.size() != 2)
 		{
 			showUsage(mob);
 			return false;
@@ -90,20 +94,50 @@ public class Party extends StdCommand
 			else
 				mob.tell(L("You are not in a party."));
 			break;
-		case "INVITE":
-			parties.sendInvitation(mob, commands.get(2));
-			break;
 		case "PENDING":
-			parties.showPendingInvitations(mob);
-			break;
-		case "ACCEPT":
-			acceptInvitation(mob, parties, commands.get(2));
+			parties.showPendingEntries(mob);
 			break;
 		default:
 			showUsage(mob);
 			break;
 		}
 		return false;
+	}
+
+	/**
+	 * Runs a party action that takes one character name or pending ID.
+	 *
+	 * @param mob the player entering the command
+	 * @param parties the library handling the change
+	 * @param action the action word in uppercase
+	 * @param argument the name or ID supplied by the player
+	 */
+	private void executeWithArgument(final MOB mob, final PartyLibrary parties,
+			final String action, final String argument)
+	{
+		switch(action)
+		{
+		case "INVITE":
+			parties.sendInvitation(mob, argument);
+			break;
+		case "REQUEST":
+			parties.requestJoin(mob, argument);
+			break;
+		case "ACCEPT":
+		case "APPROVE":
+			final long id = readPendingId(mob, action, argument);
+			if(id > 0)
+			{
+				if("ACCEPT".equals(action))
+					parties.acceptInvitation(mob, id);
+				else
+					parties.approveRequest(mob, id);
+			}
+			break;
+		default:
+			showUsage(mob);
+			break;
+		}
 	}
 
 	/**
@@ -132,28 +166,28 @@ public class Party extends StdCommand
 	}
 
 	/**
-	 * Reads an invitation ID before sending an acceptance to the library.
+	 * Reads a positive pending ID and gives usage help if it is invalid.
 	 *
-	 * @param mob the player accepting an invitation
-	 * @param parties the library handling the change
-	 * @param idText the invitation ID typed by the player
+	 * @param mob the player acting on an entry
+	 * @param action the action word in uppercase
+	 * @param idText the ID typed by the player
+	 * @return the valid ID, or zero if the input was invalid
 	 */
-	private void acceptInvitation(final MOB mob, final PartyLibrary parties, final String idText)
+	private long readPendingId(final MOB mob, final String action, final String idText)
 	{
-		long invitationId;
 		try
 		{
-			invitationId = Long.parseLong(idText);
+			final long id = Long.parseLong(idText);
+			if(id > 0)
+				return id;
 		}
 		catch(final NumberFormatException error)
 		{
-			invitationId = 0;
+			// Invalid text and IDs outside the supported range use the same help.
 		}
 
-		if(invitationId > 0)
-			parties.acceptInvitation(mob, invitationId);
-		else
-			mob.tell(L("Use PARTY ACCEPT <id>. Use PARTY PENDING to find the invitation ID."));
+		mob.tell(L("Use PARTY @x1 <id>. Use PARTY PENDING to find the ID.", action));
+		return 0;
 	}
 
 	/**
@@ -163,7 +197,8 @@ public class Party extends StdCommand
 	 */
 	private void showUsage(final MOB mob)
 	{
-		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY INVITE <name>, PARTY PENDING, or PARTY ACCEPT <id>."));
+		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY INVITE <name>, PARTY REQUEST <leader>, "
+				+ "PARTY PENDING, PARTY ACCEPT <id>, or PARTY APPROVE <id>. Use HELP PARTY for details."));
 	}
 
 	/**

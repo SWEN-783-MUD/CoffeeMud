@@ -12,9 +12,11 @@ import com.planet_ink.coffee_mud.core.CMProps;
 import com.planet_ink.coffee_mud.core.CMStrings;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
+import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
 import com.planet_ink.coffee_mud.core.party.PartyStore;
-import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
+import com.planet_ink.coffee_mud.core.party.PartyStore.JoinResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
+import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
 
 /** Handles live players and feedback around the party store's membership rules. */
 public class CMParties extends StdLibrary implements PartyLibrary
@@ -88,7 +90,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void sendInvitation(final MOB sender, final String recipientName)
 	{
-		if(!canChangeInvitations(sender))
+		if(!canManageParty(sender))
 			return;
 
 		// Check the sender before looking up another player. The store rechecks leadership when writing.
@@ -122,9 +124,15 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			break;
 		}
 		case ALREADY_PENDING:
-			sender.tell(L("Your invitation to @x1 is already pending. Invitation ID is @x2.",
-					recipient.Name(), Long.toString(result.getEntry().getId())));
+		{
+			final PartyPendingEntry entry = result.getEntry();
+			final String id = Long.toString(entry.getId());
+			if(entry.getType() == Type.REQUEST)
+				sender.tell(L("@x1 already asked to join your party. Use PARTY APPROVE @x2.", recipient.Name(), id));
+			else
+				sender.tell(L("Your invitation to @x1 is already pending. Invitation ID is @x2.", recipient.Name(), id));
 			break;
+		}
 		case NOT_LEADER:
 			sender.tell(L("Only a party leader can send invitations."));
 			break;
@@ -136,7 +144,61 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 	/** {@inheritDoc} */
 	@Override
-	public void showPendingInvitations(final MOB character)
+	public void requestJoin(final MOB candidate, final String leaderName)
+	{
+		if(!canManageParty(candidate))
+			return;
+
+		// Use the same online lookup as invitations. The store checks current leadership.
+		final MOB leader = findOnlinePlayer(leaderName);
+		if(leader == null)
+		{
+			candidate.tell(L("No online player has the character name @x1.", leaderName));
+			return;
+		}
+
+		final PartyStore currentStore = store;
+		final String leaderKey = characterKey(leader);
+		final PendingResult result = currentStore.requestJoin(characterKey(candidate), leaderKey);
+		switch(result.getStatus())
+		{
+		case CREATED:
+		{
+			final PartyPendingEntry entry = result.getEntry();
+			final String id = Long.toString(entry.getId());
+			candidate.tell(L("You asked to join @x1's party. Request ID is @x2.", leader.Name(), id));
+
+			// If leadership changed while the request was opening, the new leader can see it in PARTY PENDING.
+			final PartySnapshot current = currentStore.findByMember(leaderKey);
+			if((current != null) && (current.getId() == entry.getPartyId()) && leaderKey.equals(current.getLeader()))
+				leader.tell(L("@x1 asked to join your party. Use PARTY APPROVE @x2 or PARTY PENDING.",
+						candidate.Name(), id));
+			break;
+		}
+		case ALREADY_PENDING:
+		{
+			// The first entry decides which side still needs to act.
+			final PartyPendingEntry entry = result.getEntry();
+			final String id = Long.toString(entry.getId());
+			if(entry.getType() == Type.INVITATION)
+				candidate.tell(L("You already have an invitation to that party. Use PARTY ACCEPT @x1.", id));
+			else
+				candidate.tell(L("Your request to join @x1's party is already pending. Request ID is @x2.",
+						leader.Name(), id));
+			break;
+		}
+		case NOT_LEADER:
+			candidate.tell(L("@x1 does not lead a party. Use PARTY REQUEST <leader>.", leader.Name()));
+			break;
+		case ALREADY_MEMBER:
+			candidate.tell(L("You already belong to a party. Use PARTY LEAVE before joining another."));
+			break;
+		}
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void showPendingEntries(final MOB character)
 	{
 		if(!isPlayerCharacter(character))
 			return;
@@ -145,57 +207,96 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		final List<PartyPendingEntry> pending = store.pendingEntries(characterKey(character));
 		if(pending.isEmpty())
 		{
-			character.tell(L("You have no pending party invitations."));
+			character.tell(L("You have no pending party invitations or requests."));
 			return;
 		}
 
-		// Round up so a live invite with less than a second left still shows time.
-		for(final PartyPendingEntry invite : pending)
+		// Round up so a live entry with less than a second left still shows time.
+		for(final PartyPendingEntry entry : pending)
 		{
-			final Duration remaining = Duration.between(now, invite.getExpiresAt());
-			final long seconds = Math.max(0, remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1));
-			character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3.",
-					invite.getSenderKey(), Long.toString(seconds), Long.toString(invite.getId())));
+			final Duration remaining = Duration.between(now, entry.getExpiresAt());
+			final long roundedSeconds = remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1);
+			final String seconds = Long.toString(Math.max(0, roundedSeconds));
+			final String id = Long.toString(entry.getId());
+			if(entry.getType() == Type.INVITATION)
+				character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3.",
+						entry.getSenderKey(), seconds, id));
+			else
+				character.tell(L("@x1 asked to join your party. @x2 seconds left. Use PARTY APPROVE @x3.",
+						entry.getCandidateKey(), seconds, id));
 		}
 
 		if(character.isInCombat())
-			character.tell(L("You can accept after combat if the invitation is still open."));
+			character.tell(L("You can act on pending entries after combat if they are still open."));
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void acceptInvitation(final MOB character, final long invitationId)
 	{
-		if(!canChangeInvitations(character))
-			return;
+		if(canManageParty(character))
+			reportJoinResult(character, store.acceptInvitation(characterKey(character), invitationId), Type.INVITATION);
+	}
 
-		switch(store.acceptInvitation(characterKey(character), invitationId).getStatus())
+	/** {@inheritDoc} */
+	@Override
+	public void approveRequest(final MOB leader, final long requestId)
+	{
+		if(canManageParty(leader))
+			reportJoinResult(leader, store.approveRequest(characterKey(leader), requestId), Type.REQUEST);
+	}
+
+	/**
+	 * Explains the outcome of an acceptance or approval after the store finishes.
+	 *
+	 * @param actor the player who entered the command
+	 * @param result the outcome from the store
+	 * @param type the entry type handled by the command
+	 */
+	private void reportJoinResult(final MOB actor, final JoinResult result, final Type type)
+	{
+		final boolean approval = type == Type.REQUEST;
+		switch(result.getStatus())
 		{
 		case JOINED:
-			character.tell(L("You joined the party. Use PARTY to see the roster."));
+			if(approval)
+			{
+				final String candidateKey = result.getJoinedCandidateKey();
+				actor.tell(L("@x1 joined your party. Use PARTY to see the roster.", candidateKey));
+
+				// Approval uses the character key even if the candidate logged out.
+				final MOB candidate = findOnlinePlayer(candidateKey);
+				if(candidate != null)
+					candidate.tell(L("@x1 approved your request. You joined the party. Use PARTY to see the roster.",
+							actor.Name()));
+			}
+			else
+				actor.tell(L("You joined the party. Use PARTY to see the roster."));
 			break;
 		case ALREADY_MEMBER:
-			character.tell(L("You already belong to a party. Use PARTY LEAVE before joining another."));
+			actor.tell(approval ? L("That player already belongs to a party.")
+					: L("You already belong to a party. Use PARTY LEAVE before joining another."));
 			break;
 		case ENTRY_UNAVAILABLE:
-			character.tell(L("That invitation is unavailable. Use PARTY PENDING to see your invitations."));
+			actor.tell(approval ? L("That request is unavailable. Use PARTY PENDING to see requests you can approve.")
+					: L("That invitation is unavailable. Use PARTY PENDING to see your invitations."));
 			break;
 		case EXPIRED:
-			character.tell(L("That party invitation has expired."));
+			actor.tell(approval ? L("That join request has expired.") : L("That party invitation has expired."));
 			break;
 		case PARTY_FULL:
-			character.tell(L("That party is full. You can try again if a seat opens before the invitation expires."));
+			actor.tell(L("That party is full. You can try again if a seat opens before the deadline."));
 			break;
 		}
 	}
 
 	/**
-	 * Checks the caller before an invite or acceptance changes party state.
+	 * Checks the actor before a party management command changes state.
 	 *
 	 * @param character the actor trying to make the change
 	 * @return whether the player can make the change now
 	 */
-	private boolean canChangeInvitations(final MOB character)
+	private boolean canManageParty(final MOB character)
 	{
 		if(!isPlayerCharacter(character))
 		{
@@ -206,7 +307,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 		if(character.isInCombat())
 		{
-			character.tell(L("Wait until combat ends before sending or accepting party invitations."));
+			character.tell(L("Wait until combat ends before acting on party invitations or requests."));
 			return false;
 		}
 		return true;

@@ -61,11 +61,21 @@ public interface PartyLibrary extends CMLibrary
 	public void sendInvitation(MOB sender, String recipientName);
 
 	/**
-	 * Shows the player's live invitations, deadlines, and commands for accepting them.
+	 * Asks to join a party by its online leader's exact character name.
+	 * Reports the result to the candidate and delivers a new request to the leader.
 	 *
-	 * @param character the player checking their invitations
+	 * @param candidate the player asking to join
+	 * @param leaderName the character name supplied by the candidate
 	 */
-	public void showPendingInvitations(MOB character);
+	public void requestJoin(MOB candidate, String leaderName);
+
+	/**
+	 * Shows the player's invitations and any requests they can approve.
+	 * Each entry includes its remaining time and the command to use.
+	 *
+	 * @param character the player checking their pending entries
+	 */
+	public void showPendingEntries(MOB character);
 
 	/**
 	 * Attempts to join using an invitation and reports the result to the player.
@@ -74,4 +84,12 @@ public interface PartyLibrary extends CMLibrary
 	 * @param invitationId the ID supplied by the player
 	 */
 	public void acceptInvitation(MOB character, long invitationId);
+
+	/**
+	 * Lets the current leader approve a request and tells the candidate if online.
+	 *
+	 * @param leader the player approving the request
+	 * @param requestId the ID supplied by the leader
+	 */
+	public void approveRequest(MOB leader, long requestId);
 }

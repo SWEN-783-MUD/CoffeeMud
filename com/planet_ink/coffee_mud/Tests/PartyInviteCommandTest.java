@@ -16,11 +16,14 @@ import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.Directions;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 
-/** Runs the invitation walkthrough through the live party library and command registry. */
+/** Runs both ways of joining through the live party library and command registry. */
 public class PartyInviteCommandTest extends StdTest
 {
 	/** The acceptance command shown to a recipient, including the invitation ID. */
 	private static final Pattern ACCEPT_COMMAND = Pattern.compile("PARTY ACCEPT ([0-9]+)");
+
+	/** The approval command shown to a leader, including the request ID. */
+	private static final Pattern APPROVE_COMMAND = Pattern.compile("PARTY APPROVE ([0-9]+)");
 
 	/**
 	 * Identifies this fixture for CoffeeMud's test command.
@@ -45,7 +48,7 @@ public class PartyInviteCommandTest extends StdTest
 	}
 
 	/**
-	 * Gives two test players rooms and online sessions, then runs the commands they would type.
+	 * Gives test players rooms and online sessions, then runs the commands they would type.
 	 *
 	 * @param mob the test runner's actor, separate from the players in this fixture
 	 * @param metaFlags CoffeeMud's test command flags
@@ -74,9 +77,11 @@ public class PartyInviteCommandTest extends StdTest
 			passage.rawDoors()[Directions.SOUTH] = hall;
 
 			try(TestPlayer alice = new TestPlayer("Alice" + suffix, hall);
-				TestPlayer bob = new TestPlayer("Bob" + suffix, passage))
+				TestPlayer bob = new TestPlayer("Bob" + suffix, passage);
+				TestPlayer carol = new TestPlayer("Carol" + suffix, passage))
 			{
 				runWalkthrough(alice, bob, hall, passage);
+				runRequestWalkthrough(alice, bob, carol);
 			}
 			return null;
 		}
@@ -119,18 +124,23 @@ public class PartyInviteCommandTest extends StdTest
 		check(accept.find(), "The notification should show the acceptance command.");
 		final String id = accept.group(1);
 		check(CMLib.parties().findParty(bob.mob) == null, "An invitation alone must leave Bob without a party.");
-
 		// Repeating the invite gives Alice the same ID without another notice for Bob.
 		final String repeat = alice.command("PARTY", "INVITE", bobName);
 		check(repeat.contains("already pending") && repeat.contains("ID is " + id), "A repeat must report the original ID.");
 		check(notification.equals(bob.output()), "A repeat invite must not send another notice.");
+
+		check(bob.command("PARTY", "REQUEST", aliceName).contains("PARTY ACCEPT " + id),
+				"A request that crosses an invite should show the original acceptance command.");
+		check(CMLib.parties().findParty(bob.mob) == null, "A crossed request must not admit Bob.");
+
 		final String pending = bob.command("PARTY", "PENDING");
 		check(pending.contains(aliceName) && pending.contains("seconds left") && pending.contains("PARTY ACCEPT " + id),
 				"Pending should show the sender, time remaining, and the original acceptance command.");
 		check(bob.command("PARTY", "ACCEPT", "not-an-id").contains("Use PARTY ACCEPT"),
 				"An invalid ID should give the player usage help.");
 
-		checkCombatAcceptance(bob, passage, id);
+		checkCombatRestriction(bob, "ACCEPT", id);
+		check(CMLib.parties().findParty(bob.mob) == null, "A blocked acceptance should leave membership empty.");
 
 		// Joining updates the roster while the players stay in their own rooms.
 		check(bob.command("PARTY", "ACCEPT", id).contains("You joined the party"), "Bob should join after combat.");
@@ -149,36 +159,91 @@ public class PartyInviteCommandTest extends StdTest
 		bob.command("NORTH");
 		check(bob.mob.location() == passage && alice.mob.location() == hall, "Bob should be able to walk away alone.");
 		check(CMLib.parties().findParty(bob.mob).getId() == joined.getId(), "Independent movement should keep membership.");
-
-		check(alice.command("PARTY", "LEAVE").contains("You left the party"), "Alice should be able to leave.");
-		check(CMLib.parties().findParty(alice.mob) == null, "Leaving should remove Alice's membership.");
-		check(bob.command("PARTY").contains("Your party leader is " + bobName), "Bob should become leader.");
 	}
 
 	/**
-	 * Checks that a player in combat can read an invite and accept it after the fight.
+	 * Checks request output, succession, and approval through the real commands.
 	 *
-	 * @param bob the recipient to put in combat
-	 * @param room Bob's current room
-	 * @param id the ID from the invitation notice
+	 * @param alice the original leader
+	 * @param bob the member who will take over after Alice leaves
+	 * @param carol the character asking to join
 	 */
-	private static void checkCombatAcceptance(final TestPlayer bob, final Room room, final String id)
+	private static void runRequestWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
 	{
+		final String aliceName = alice.mob.Name();
+		final String bobName = bob.mob.Name();
+		final String carolName = carol.mob.Name();
+		check(carol.command("PARTY", "REQUEST", "Nobody" + carolName).contains("No online player"),
+				"A request to an offline name should fail clearly.");
+		check(carol.command("PARTY", "REQUEST", bobName).contains("does not lead a party"),
+				"A request should name the leader, not another member.");
+		check(carol.command("PARTY", "REQUEST", aliceName).contains("You asked to join " + aliceName),
+				"Carol should be able to ask Alice to join.");
+
+		// An invite that crosses the request should show Alice how to approve the first entry.
+		final String notice = alice.output();
+		final Matcher approve = APPROVE_COMMAND.matcher(notice);
+		check(notice.contains(carolName + " asked to join") && approve.find(),
+				"The leader should get the requester and approval command.");
+		final String id = approve.group(1);
+		check(carol.command("PARTY", "REQUEST", aliceName).contains("Request ID is " + id),
+				"A repeat should show Carol the original ID.");
+		check(alice.output().equals(notice), "A repeat request should not notify the leader again.");
+		check(alice.command("PARTY", "INVITE", carolName).contains("PARTY APPROVE " + id),
+				"An invite that crosses a request should show the original approval command.");
+		check(CMLib.parties().findParty(carol.mob) == null, "Carol still needs explicit approval.");
+		check(bob.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
+				"Bob cannot approve while Alice is leader.");
+
+		// Alice's departure moves authority to Bob without changing Carol's request.
+		check(alice.command("PARTY", "LEAVE").contains("You left the party"), "Alice should be able to leave.");
+		check(CMLib.parties().findParty(alice.mob) == null, "Leaving should remove Alice's membership.");
+		check(bob.command("PARTY").contains("Your party leader is " + bobName), "Bob should become leader.");
+		final String pending = bob.command("PARTY", "PENDING");
+		check(pending.contains(carolName) && pending.contains("seconds left") && pending.contains("PARTY APPROVE " + id),
+				"The new leader should see Carol's original request and remaining time.");
+		check(alice.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
+				"Alice should lose the ability to approve.");
+		checkCombatRestriction(bob, "APPROVE", id);
+		check(CMLib.parties().findParty(carol.mob) == null, "A blocked approval should leave membership empty.");
+
+		// Approval sends feedback to both sides and keeps their positions and follow links.
+		final Room carolRoom = carol.mob.location();
+		check(bob.command("PARTY", "APPROVE", id).contains(carolName + " joined your party"),
+				"The current leader should be able to approve after combat.");
+		check(carol.output().contains(bobName + " approved your request"), "Carol should be notified of approval.");
+		check(carol.command("PARTY").contains("Your party leader is " + bobName),
+				"Carol should see the new roster after approval.");
+		check(carol.mob.location() == carolRoom && carol.mob.amFollowing() == null,
+				"Approval should neither move Carol nor start following.");
+	}
+
+	/**
+	 * Checks that a player in combat can read an entry but cannot complete it yet.
+	 *
+	 * @param player the actor to put in combat
+	 * @param action the pending action the fight should block
+	 * @param id the ID from the invitation or request notice
+	 */
+	private static void checkCombatRestriction(final TestPlayer player, final String action, final String id)
+	{
+		final Room room = player.mob.location();
 		final MOB opponent = CMClass.getMOB("StdMOB");
 		try
 		{
 			// Put the opponent in the room so CoffeeMud recognizes the fight.
 			opponent.setLocation(room);
 			room.addInhabitant(opponent);
-			bob.mob.setVictim(opponent);
-			check(bob.mob.isInCombat(), "The fixture should put Bob in combat.");
-			check(bob.command("PARTY", "PENDING").contains("PARTY ACCEPT " + id), "Combat should allow pending reads.");
-			check(bob.command("PARTY", "ACCEPT", id).contains("Wait until combat ends"), "Combat should block acceptance.");
-			check(CMLib.parties().findParty(bob.mob) == null, "A blocked acceptance should leave membership empty.");
+			player.mob.setVictim(opponent);
+			check(player.mob.isInCombat(), "The fixture should put the player in combat.");
+			check(player.command("PARTY", "PENDING").contains("PARTY " + action + " " + id),
+					"Combat should allow pending reads.");
+			check(player.command("PARTY", action, id).contains("Wait until combat ends"),
+					"Combat should block " + action + ".");
 		}
 		finally
 		{
-			bob.mob.makePeace(true);
+			player.mob.makePeace(true);
 			opponent.destroy();
 		}
 	}
