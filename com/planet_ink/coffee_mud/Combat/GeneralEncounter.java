@@ -30,6 +30,7 @@ public class GeneralEncounter implements Encounter
 	/** Phase reads must be safe while the party library holds its character lock. */
 	private volatile State state=State.PENDING;
 	private int round=0;
+	private EncounterParticipant currentParticipant;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -62,6 +63,14 @@ public class GeneralEncounter implements Encounter
 	}
 
 	/**
+	 * @return the participant taking the active turn, or null when no turn is active
+	 */
+	public synchronized EncounterParticipant getCurrentParticipant()
+	{
+		return (state==State.ACTIVE)?currentParticipant:null;
+	}
+
+	/**
 	 * Activates the encounter at round one once setup is complete.
 	 *
 	 * @return true if the encounter moved from pending to active
@@ -71,6 +80,8 @@ public class GeneralEncounter implements Encounter
 		if(state!=State.PENDING)
 			return false;
 		round=1;
+		// Setup supplies the participant order; initiative rolling is separate.
+		currentParticipant=participants.isEmpty()?null:participants.get(0);
 		state=State.ACTIVE;
 		return true;
 	}
@@ -115,6 +126,7 @@ public class GeneralEncounter implements Encounter
 	{
 		if((state!=State.ACTIVE)&&(state!=State.AWAITING_RESCUE))
 			return false;
+		currentParticipant=null;
 		state=State.COMPLETED;
 		return true;
 	}
