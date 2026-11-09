@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-09
 ---
 
@@ -70,28 +70,3 @@ Flanking, cover, ranged combat, spell areas, and advanced movement are deferred.
 Test cardinal and diagonal movement, diagonal counts across separate Strides, reset on a new turn, blocked corners, occupied tiles, fallback placement, and deterministic route selection. Rejected movement must have no partial effects.
 
 Verify melee reach and blocked attack paths against the same layout. Check that exploration navigation still uses room connections and that ending an encounter preserves authored terrain. Previewing a layout must not create an encounter or move occupants.
-
-## Pros and Cons of the Options
-
-### Two-Dimensional Grid
-
-- Good, because it represents routes around obstacles and consistent reach.
-- Bad, because it requires pathfinding, occupancy management, and map authoring.
-
-### One-Dimensional Line
-
-- Good, because positions and distance calculations are simpler.
-- Bad, because it cannot represent the required two-dimensional destinations and obstacle routes without adapting the model.
-
-### Abstract Zones or Range Bands
-
-- Good, because named destinations can be easy to describe in text.
-- Bad, because exact Speed costs, diagonal movement, and melee reach require approximations that differ from the current milestone stories.
-
-## More Information
-
-- [Combat ruleset](pathfinder2e-madr.md)
-- [Turn management](turn-system-madr.md)
-- [Epic 2: Rooms, Tactical Grids & Presentation](https://github.com/SWEN-783-MUD/CoffeeMud/issues/33)
-- [MUD-3.3: Starting Positions, Initiative & Awareness](https://github.com/SWEN-783-MUD/CoffeeMud/issues/42)
-- [MUD-3.4.4: Stride & Tactical Movement](https://github.com/SWEN-783-MUD/CoffeeMud/issues/58)

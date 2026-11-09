@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-09
 ---
 
@@ -59,9 +59,6 @@ The joining window, turn timeouts, rescue window, and recovery rules are project
 
 ### Deferred Scope
 
-The broader [Round and Turn Management epic (#22)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/22) includes reaction resources. They remain planned beyond this milestone; their deferral follows the explicit scope in [MUD-3.4.1 (#55)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/55).
-
-
 Full character creation, attribute/proficiency conversion, ranged attacks, spellcasting, reactions including Shield Block, advanced conditions, weapon effects, and PF2e dying/wounded/stabilization rules are deferred. Presets are a temporary source of combat values, not a replacement design for future character customization.
 
 ### Consequences
@@ -76,13 +73,4 @@ Full character creation, attribute/proficiency conversion, ranged attacks, spell
 
 Use controlled attack and damage rolls to test all four degrees of success, natural-roll adjustments, multiple attack penalties, action expenditure, and shield expiration. Verify that invalid requests change neither HP nor action resources.
 
-Test knockout, rescue, victory, and defeat separately from damage formulas. Confirm that preset inspection never heals a character, unsupported presets are rejected, and saved definitions and NPC assignments survive reloads. These are validation targets, not a statement that the tests already pass.
-
-## More Information
-
-- [Turn management](turn-system-madr.md)
-- [Positional combat](positional-combat-madr.md)
-- [Epic 3: Unstructured Encounter Lifecycle](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39)
-- [Epic: Combat Math Library](https://github.com/SWEN-783-MUD/CoffeeMud/issues/63)
-- [MUD-3.11: Combat Presets & Fixed Equipment](https://github.com/SWEN-783-MUD/CoffeeMud/issues/50)
-- [MUD-3.4.5: Melee Strike & Damage](https://github.com/SWEN-783-MUD/CoffeeMud/issues/59)
+Test knockout, rescue, victory, and defeat separately from damage formulas. Confirm that preset inspection never heals a character, unsupported presets are rejected, and saved definitions and NPC assignments survive reloads.

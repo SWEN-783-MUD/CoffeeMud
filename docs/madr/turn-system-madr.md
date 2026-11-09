@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-09
 ---
 
@@ -31,12 +31,6 @@ An encounter must own combat timing and resources while CoffeeMUD rooms continue
 Chosen option: encounter-owned sequential turns. A room's EncounterManager coordinates admission and the room's encounter; the encounter owns participant order, rounds, the active participant, and combat resources. Milestone 1 supports one ongoing encounter in the test dungeon. Dungeon-wide enforcement must coordinate room managers; a room slot alone does not enforce that limit.
 
 CoffeeMUD messages remain the boundary for location validation and dispatch. Native automatic attacks, damage, and command processing must not independently advance encounter combat.
-
-### Alignment with the Epics
-
-[Encounter Management (#14)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/14) establishes room-managed encounters, initially one player against one NPC. [Epic 3 (#39)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39) extends that foundation to the milestone's multiplayer encounter. The one-encounter test-dungeon limit is milestone scope, not a requirement that the entire server share one encounter.
-
-[Round and Turn Management (#22)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/22) covers initiative, rounds, turns, actions, and reactions. [Action Queue (#10)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/10) establishes prerequisite checks and action results. The lifecycle below follows those responsibilities. Reaction support remains part of the broader design, but [MUD-3.4.1 (#55)](https://github.com/SWEN-783-MUD/CoffeeMud/issues/55) explicitly defers reactions and advanced action types beyond Milestone 1.
 
 ### Lifecycle and Setup
 
@@ -93,13 +87,3 @@ Verify round-one activation, fixed turn order, round wraparound, three-action re
 Test duplicate End Turn requests and stale timeout events, including events arriving during a later turn of the same participant. Test command acceptance immediately before and at deadlines, failed validation without resource changes, and serialized resolution without double application.
 
 Check joining and rescue deadlines without relying on long real-time sleeps. Confirm that pending and paused participants cannot prepare or act, late arrivals wait for the correct boundary, completed encounters remain terminal, and native combat cannot apply extra attacks or damage outside the encounter. These are design validation targets; the current implementation is incremental.
-
-## More Information
-
-- [Combat ruleset](pathfinder2e-madr.md)
-- [Positional combat](positional-combat-madr.md)
-- [Epic 3: Unstructured Encounter Lifecycle](https://github.com/SWEN-783-MUD/CoffeeMud/issues/39)
-- [MUD-3.2: Party Notifications & Encounter Joining Window](https://github.com/SWEN-783-MUD/CoffeeMud/issues/41)
-- [MUD-3.4.2: Action Queue & Resolution](https://github.com/SWEN-783-MUD/CoffeeMud/issues/56)
-- [MUD-3.4.3: Round & Turn Management](https://github.com/SWEN-783-MUD/CoffeeMud/issues/57)
-- [MUD-3.10: Party Rescue Window & Defeat](https://github.com/SWEN-783-MUD/CoffeeMud/issues/49)
