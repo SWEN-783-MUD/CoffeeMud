@@ -17,8 +17,10 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrackingFl
 import com.planet_ink.coffee_mud.Locales.interfaces.*;
 import com.planet_ink.coffee_mud.MOBS.interfaces.*;
 import com.planet_ink.coffee_mud.Races.interfaces.*;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Completed;
 
 import java.util.*;
+import java.util.function.Consumer;
 /*
    Copyright 2005-2026 Bo Zimmerman
 
@@ -745,6 +747,36 @@ public interface TrackingLibrary extends CMLibrary
 	 * @return true if the movement was successful
 	 */
 	public boolean walk(MOB mob, int directionCode, boolean flee, boolean nolook);
+
+	/**
+	 * Moves a character through an exit named in a command. An independent
+	 * player move resolves the player's party branches before reporting arrivals.
+	 *
+	 * @param mob the character entering the command
+	 * @param directionCode the exit direction
+	 * @param running whether to use native running costs
+	 * @param metaFlags CoffeeMud's command flags, including forced movement
+	 * @return whether the initiator's move succeeded
+	 */
+	public boolean travel(MOB mob, int directionCode, boolean running, int metaFlags);
+
+	/**
+	 * Registers a synchronous consumer for completed command travel. The
+	 * consumer runs after synchronous room handling and follower processing finish.
+	 *
+	 * @param listener the consumer of the completed batch
+	 * @return a handle that unregisters the consumer when closed
+	 */
+	public AutoCloseable onPartyTravelCompleted(Consumer<Completed> listener);
+
+	/**
+	 * Identifies an entry message being sent as part of a coordinated move.
+	 * Synchronous entry handlers can defer their work to the completed batch.
+	 *
+	 * @param message the native room message being handled
+	 * @return whether its entry is covered by the current batch
+	 */
+	public boolean isPartyTravelArrival(CMMsg message);
 
 	/**
 	 *

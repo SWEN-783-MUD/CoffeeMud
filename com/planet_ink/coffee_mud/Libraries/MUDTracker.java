@@ -18,6 +18,8 @@ import com.planet_ink.coffee_mud.Races.interfaces.*;
 import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.ProtocolLibrary.InProto;
@@ -26,6 +28,11 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.RFilters;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrackingFlag;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrackingFlags;
 import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrailFlag;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Arrival;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Completed;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Failure;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.FailureReason;
+import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 
 /*
    Copyright 2005-2026 Bo Zimmerman
@@ -44,6 +51,39 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.TrackingLibrary.TrailFlag;
 */
 public class MUDTracker extends StdLibrary implements TrackingLibrary
 {
+	/** Command flags that mark a move initiated by another actor or by the engine. */
+	private static final int FORCED_TRAVEL = MUDCmdProcessor.METAFLAG_FORCED | MUDCmdProcessor.METAFLAG_MPFORCED
+			| MUDCmdProcessor.METAFLAG_ORDER | MUDCmdProcessor.METAFLAG_POSSESSED;
+
+	/** Consumers of finished travel, read after the native move releases its locks. */
+	private final List<Consumer<Completed>> travelListeners = new CopyOnWriteArrayList<Consumer<Completed>>();
+
+	/** The entry message covered by a batch on the current movement thread. */
+	private final ThreadLocal<CMMsg> travelArrival = new ThreadLocal<CMMsg>();
+
+	/** Collects committed arrivals and failures for one independent command. */
+	private static final class TravelBatch
+	{
+		/** The service that owns party positions and follow links. */
+		private final PartyLibrary parties;
+		/** Actual arrivals, beginning with the initiator. */
+		private final List<Arrival> arrivals = new ArrayList<Arrival>();
+		/** Steps that failed or were skipped. */
+		private final List<Failure> failures = new ArrayList<Failure>();
+		/** The actual destination selected by the initiator's native move. */
+		private Room destination;
+
+		/**
+		 * Starts collecting outcomes for one traversal.
+		 *
+		 * @param parties the party service for this movement
+		 */
+		private TravelBatch(final PartyLibrary parties)
+		{
+			this.parties = parties;
+		}
+	}
+
 	@Override
 	public String ID()
 	{
@@ -1662,7 +1702,94 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return move(mob,directionCode,flee,nolook,noriders,always,true);
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public boolean travel(final MOB mob, final int directionCode, final boolean running, final int metaFlags)
+	{
+		// Native calls and ordered movement use the original path. Only a player's own command opens a batch.
+		final PartyLibrary parties = mob.isPlayer() && ((metaFlags & FORCED_TRAVEL) == 0) ? CMLib.parties() : null;
+		if(parties == null)
+			return move(mob,directionCode,false,false,false,false,running);
+
+		final Step root = parties.captureTravel(mob);
+		if(root == null)
+			return false;
+		final TravelBatch batch = new TravelBatch(parties);
+		final boolean moved = move(mob,directionCode,false,false,false,false,running,batch,root);
+		if(moved && (batch.destination != null))
+			publishTravel(new Completed(root.source,batch.destination,directionCode,batch.arrivals,batch.failures));
+		return moved;
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public AutoCloseable onPartyTravelCompleted(final Consumer<Completed> listener)
+	{
+		travelListeners.add(Objects.requireNonNull(listener));
+		return () -> travelListeners.remove(listener);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public boolean isPartyTravelArrival(final CMMsg message)
+	{
+		return (message != null) && (travelArrival.get() == message);
+	}
+
+	/**
+	 * Delivers the completed snapshot after room callbacks and follow processing.
+	 * A listener failure cannot turn an already committed move into a failed one.
+	 *
+	 * @param completed the completed traversal
+	 */
+	private void publishTravel(final Completed completed)
+	{
+		for(final Consumer<Completed> listener : travelListeners)
+		{
+			try
+			{
+				listener.accept(completed);
+			}
+			catch(final RuntimeException error)
+			{
+				Log.errOut("PartyTravel",error);
+			}
+		}
+	}
+
+	/**
+	 * Runs a native move for callers that did not start a coordinated command.
+	 *
+	 * @param mob the character moving
+	 * @param directionCode the exit direction
+	 * @param flee whether this is a native flee
+	 * @param nolook whether to skip looking after entry
+	 * @param noriders whether to skip native rider movement
+	 * @param always whether native permissions mark the move as forced
+	 * @param running whether to use running costs
+	 * @return whether the native move succeeded
+	 */
 	protected boolean move(final MOB mob, final int directionCode, final boolean flee, final boolean nolook, final boolean noriders, final boolean always, final boolean running)
+	{
+		return move(mob,directionCode,flee,nolook,noriders,always,running,null,null);
+	}
+
+	/**
+	 * Runs native exit rules and, for a captured step, rechecks the party before placement.
+	 *
+	 * @param mob the character moving
+	 * @param directionCode the exit direction
+	 * @param flee whether this is a native flee
+	 * @param nolook whether to skip looking after entry
+	 * @param noriders whether to skip native rider movement
+	 * @param always whether native permissions mark the move as forced
+	 * @param running whether to use running costs
+	 * @param batch the active traversal, or null for native movement
+	 * @param step the captured traveler, or null for native movement
+	 * @return whether the step succeeded
+	 */
+	private boolean move(final MOB mob, final int directionCode, final boolean flee, final boolean nolook,
+			final boolean noriders, final boolean always, final boolean running, final TravelBatch batch, final Step step)
 	{
 		final Room thisRoom=mob.location();
 		if(thisRoom==null)
@@ -1680,6 +1807,8 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 			}
 			return false;
 		}
+		if((step != null) && !batch.parties.canTravel(step, step.parent == null ? destRoom : batch.destination))
+			return false;
 
 		final CMFlagLibrary flags=CMLib.flags();
 		final int opDir=thisRoom.getReverseDir(directionCode);
@@ -1829,20 +1958,25 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 			enterTrailersSoFar=null;
 		if(exit!=null)
 			exit.executeMsg(mob,enterMsg);
-		if(mob.location()!=null)
-			mob.location().delInhabitant(mob);
 
-		((Room)leaveMsg.target()).send(mob,leaveMsg);
-
-		if(enterMsg.target()==null)
+		if(step == null)
 		{
-			((Room)leaveMsg.target()).bringMobHere(mob,false);
-			mob.tell(L("You can't go that way."));
-			return false;
+			if(mob.location()!=null)
+				mob.location().delInhabitant(mob);
+			((Room)leaveMsg.target()).send(mob,leaveMsg);
+			if(enterMsg.target()==null)
+			{
+				((Room)leaveMsg.target()).bringMobHere(mob,false);
+				mob.tell(L("You can't go that way."));
+				return false;
+			}
+			mob.setLocation((Room)enterMsg.target());
+			((Room)enterMsg.target()).addInhabitant(mob);
+			((Room)enterMsg.target()).send(mob,enterMsg);
 		}
-		mob.setLocation((Room)enterMsg.target());
-		((Room)enterMsg.target()).addInhabitant(mob);
-		((Room)enterMsg.target()).send(mob,enterMsg);
+		else
+		if(!placePartyTraveler(batch,step,leaveMsg,enterMsg,opDir))
+			return false;
 
 		if(opExit!=null)
 			opExit.executeMsg(mob,leaveMsg);
@@ -1870,6 +2004,9 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 				final MOB follower=mob.fetchFollower(f);
 				if(follower!=null)
 				{
+					// A command batch uses the captured player branches below.
+					if((step != null) && follower.isPlayer())
+						continue;
 					if((follower.amFollowing()==mob)
 					&&((follower.location()==thisRoom)||(follower.location()==destRoom)))
 					{
@@ -1880,33 +2017,14 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 								thisRoom.show(follower,null,null,CMMsg.MSG_OK_ACTION,L("<S-NAME> remain(s) on guard here."));
 							else
 							{
-								final String inDir=((thisRoom instanceof Boardable)||(thisRoom.getArea() instanceof Boardable))?
-										CMLib.directions().getShipDirectionName(directionCode):CMLib.directions().getDirectionName(directionCode);
-								follower.tell(L("You follow @x1 @x2.",mob.name(follower),inDir));
-								boolean tryStand=false;
-								if(flags.isSitting(mob))
-								{
-									if(flags.isSitting(follower))
-										tryStand=true;
-									else
-									{
-										final CMMsg msg=CMClass.getMsg(follower,null,null,CMMsg.MSG_SIT,null);
-										if((thisRoom.okMessage(mob,msg))
-										&&(!flags.isSitting(follower)))
-										{
-											thisRoom.send(mob,msg);
-											tryStand=true;
-										}
-									}
-								}
-								if(move(follower,directionCode,false,false,false,false, running)
-								&&(tryStand))
-									CMLib.commands().postStand(follower, true, false);
+								moveFollower(mob,follower,thisRoom,directionCode,running,null,null);
 							}
 						}
 					}
 				}
 			}
+			if((step != null) && (batch.destination != null))
+				movePartyFollowers(batch,step,directionCode,running);
 		}
 		if((leaveTrailersSoFar!=null)&&(leaveMsg.target() instanceof Room))
 		{
@@ -1919,6 +2037,178 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 				((Room)enterMsg.target()).send(mob,msg);
 		}
 		return true;
+	}
+
+	/**
+	 * Places one captured traveler between the ordinary leave and enter messages.
+	 * The room can run callbacks without holding the party lock.
+	 *
+	 * @param batch the active traversal
+	 * @param step the character being placed
+	 * @param leaveMsg the native leave message
+	 * @param enterMsg the native entry message
+	 * @param suggestedSide the reverse direction calculated by native movement
+	 * @return whether placement succeeded
+	 */
+	private boolean placePartyTraveler(final TravelBatch batch, final Step step, final CMMsg leaveMsg,
+			final CMMsg enterMsg, final int suggestedSide)
+	{
+		if((leaveMsg.target() != step.source) || !(enterMsg.target() instanceof Room)
+		|| !batch.parties.departTravel(step,(Room)enterMsg.target()))
+			return false;
+
+		final Room destination;
+		try
+		{
+			step.source.send(step.player,leaveMsg);
+			destination = enterMsg.target() instanceof Room ? (Room)enterMsg.target() : null;
+			if(!batch.parties.arriveTravel(step,destination))
+			{
+				if(step.parent == null)
+					step.player.tell(L("You can't go that way."));
+				return false;
+			}
+		}
+		finally
+		{
+			// A veto or concurrent departure must not strand or bring back the character.
+			batch.parties.restoreTravelSource(step);
+		}
+
+		if(destination == step.source)
+		{
+			destination.send(step.player,enterMsg);
+			return true;
+		}
+		if(step.parent == null)
+			batch.destination = destination;
+		final int entrySide = arrivalSide(step.source,destination,suggestedSide);
+		batch.arrivals.add(new Arrival(step.player,CMStrings.capitalizeAndLower(step.player.Name()),entrySide));
+
+		// An encounter handler receiving this native message can wait for the completed batch.
+		final CMMsg previous = travelArrival.get();
+		travelArrival.set(enterMsg);
+		try
+		{
+			destination.send(step.player,enterMsg);
+		}
+		finally
+		{
+			if(previous == null)
+				travelArrival.remove();
+			else
+				travelArrival.set(previous);
+		}
+		return true;
+	}
+
+	/**
+	 * Finds the real return connection, including asymmetric and one-way exits.
+	 *
+	 * @param source the room the traveler left
+	 * @param destination the room they actually entered
+	 * @param suggested the reverse direction from native movement
+	 * @return the return direction, or -1 for unknown
+	 */
+	private int arrivalSide(final Room source, final Room destination, final int suggested)
+	{
+		if((suggested >= 0) && (destination.getRoomInDir(suggested) == source))
+			return suggested;
+		for(int direction = 0; direction < Directions.NUM_DIRECTIONS(); direction++)
+		{
+			if(destination.getRoomInDir(direction) == source)
+				return direction;
+		}
+		return -1;
+	}
+
+	/**
+	 * Resolves each direct branch after its parent arrives.
+	 *
+	 * @param batch the active traversal
+	 * @param parent the step that just arrived
+	 * @param directionCode the exit direction
+	 * @param running whether to use running costs
+	 */
+	private void movePartyFollowers(final TravelBatch batch, final Step parent, final int directionCode, final boolean running)
+	{
+		final CMFlagLibrary flags = CMLib.flags();
+		for(final Step child : parent.children)
+		{
+			if(batch.parties.canTravel(child,batch.destination)
+			&& flags.isAliveAwakeMobile(child.player,true) && !child.player.isAttributeSet(MOB.Attrib.AUTOGUARD)
+			&& moveFollower(parent.player,child.player,child.source,directionCode,running,batch,child))
+				continue;
+
+			final FailureReason reason = batch.parties.canTravel(child,batch.destination)
+					? FailureReason.BLOCKED : FailureReason.NO_LONGER_ELIGIBLE;
+			if(batch.parties.detachBlockedFollower(child))
+				child.player.tell(L("You couldn't follow @x1 through the exit, so you stopped following.",
+						parent.player.name(child.player)));
+			recordFailedBranch(batch,child,reason);
+		}
+	}
+
+	/**
+	 * Records a skipped branch without trying to move or detach its descendants.
+	 *
+	 * @param batch the active traversal
+	 * @param step the character who did not arrive
+	 * @param reason why this step stayed behind
+	 */
+	private void recordFailedBranch(final TravelBatch batch, final Step step, final FailureReason reason)
+	{
+		batch.failures.add(new Failure(step.player,CMStrings.capitalizeAndLower(step.player.Name()),reason));
+		for(final Step child : step.children)
+			recordFailedBranch(batch,child,FailureReason.PARENT_STAYED);
+	}
+
+	/**
+	 * Applies native follower posture and movement to one follower.
+	 *
+	 * @param parent the character being followed
+	 * @param follower the character taking the step
+	 * @param source the room they are leaving
+	 * @param directionCode the exit direction
+	 * @param running whether to use running costs
+	 * @param batch the active traversal, or null for native movement
+	 * @param step the captured follower, or null for native movement
+	 * @return whether the follower took the step
+	 */
+	private boolean moveFollower(final MOB parent, final MOB follower, final Room source, final int directionCode,
+			final boolean running, final TravelBatch batch, final Step step)
+	{
+		final CMFlagLibrary flags = CMLib.flags();
+		final String inDir = ((source instanceof Boardable) || (source.getArea() instanceof Boardable))
+				? CMLib.directions().getShipDirectionName(directionCode) : CMLib.directions().getDirectionName(directionCode);
+		if(step == null)
+			follower.tell(L("You follow @x1 @x2.",parent.name(follower),inDir));
+
+		boolean tryStand = false;
+		if(flags.isSitting(parent))
+		{
+			if(flags.isSitting(follower))
+				tryStand = true;
+			else
+			{
+				final CMMsg msg = CMClass.getMsg(follower,null,null,CMMsg.MSG_SIT,null);
+				if(source.okMessage(parent,msg) && !flags.isSitting(follower))
+				{
+					source.send(parent,msg);
+					tryStand = true;
+				}
+			}
+		}
+		final boolean moved = step == null ? move(follower,directionCode,false,false,false,false,running)
+				: move(follower,directionCode,false,false,false,false,running,batch,step);
+		if(moved)
+		{
+			if(step != null)
+				follower.tell(L("You follow @x1 @x2.",parent.name(follower),inDir));
+			if(tryStand)
+				CMLib.commands().postStand(follower,true,false);
+		}
+		return moved;
 	}
 
 	@Override
