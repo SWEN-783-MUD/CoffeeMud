@@ -148,7 +148,7 @@ public class PartyInviteCommandTest extends StdTest
 	 * @param output the output of opening a new invitation or request
 	 * @return the ID as the player would enter it
 	 */
-	private static String sentId(final String output)
+	static String sentId(final String output)
 	{
 		final Matcher match = SENT_ID.matcher(output);
 		check(match.find(), "The sender should see the new pending ID. Output was: " + output);
@@ -321,7 +321,7 @@ public class PartyInviteCommandTest extends StdTest
 	}
 
 	/** Supplies a real player object with a session that captures command output. */
-	private static final class TestPlayer implements AutoCloseable
+	static final class TestPlayer implements AutoCloseable
 	{
 		/** The character that enters the commands. */
 		private final MOB mob = CMClass.getMOB("StdMOB");
@@ -353,6 +353,16 @@ public class PartyInviteCommandTest extends StdTest
 			session.setMob(mob);
 			mob.setSession(session);
 			CMLib.sessions().add(session);
+		}
+
+		/**
+		 * Gives other party command fixtures the character they are testing.
+		 *
+		 * @return the fixture character
+		 */
+		MOB getMob()
+		{
+			return mob;
 		}
 
 		/**

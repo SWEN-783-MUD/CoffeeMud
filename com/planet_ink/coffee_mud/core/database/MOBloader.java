@@ -2944,6 +2944,7 @@ public class MOBloader
 			final MOB followM=mob.fetchFollower(f);
 			if((followM!=null)
 			&&(followM.isMonster())
+			&&(!followM.isPlayer())
 			&&(!followM.isPossessing()))
 			{
 				if(CMLib.flags().isSavable(followM))

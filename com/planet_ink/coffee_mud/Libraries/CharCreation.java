@@ -931,6 +931,11 @@ public class CharCreation extends StdLibrary implements CharCreationLibrary
 				&&(pickedMOB != null)
 				&&((M==pickedMOB)||(M.soulMate()==pickedMOB)))
 				{
+					// Session replacement bypasses the ordinary logout path.
+					final PartyLibrary parties = CMLib.parties();
+					if(parties != null)
+						parties.playerSessionEnding(pickedMOB,S);
+
 					final Room oldRoom=pickedMOB.location();
 					if(oldRoom!=null)
 					{

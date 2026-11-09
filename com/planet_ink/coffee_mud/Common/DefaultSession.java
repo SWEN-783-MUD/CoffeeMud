@@ -3020,6 +3020,12 @@ public class DefaultSession implements Session
 		{
 			final MOB mob=this.mob;
 			final boolean inTheGame=CMLib.flags().isInTheGame(M,true);
+
+			// Detach party links before this character's room and session are torn down.
+			final PartyLibrary parties = CMLib.parties();
+			if(parties != null)
+				parties.playerSessionEnding(M,this);
+
 			if(inTheGame
 			&& (M.location()!=null)
 			&&(mob!=null)
@@ -3398,6 +3404,9 @@ public class DefaultSession implements Session
 		needPrompt=true;
 		if((!killFlag)&&(mob!=null))
 		{
+			final PartyLibrary parties = CMLib.parties();
+			if(parties != null)
+				parties.playerSessionStarted(mob,this);
 			setStatus(SessionStatus.MAINLOOP);
 			return true;
 		}
