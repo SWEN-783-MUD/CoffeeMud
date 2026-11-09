@@ -57,13 +57,41 @@ public class GeneralEncounter implements Encounter
 	}
 
 	/**
-	 * Marks an active encounter as completed.
+	 * Pauses an active encounter while another party member may rescue it.
+	 * The caller decides eligibility and owns any rescue deadline.
 	 *
-	 * @return true if the encounter moved from active to completed
+	 * @return true if the encounter moved from active to awaiting rescue
+	 */
+	public synchronized boolean awaitRescue()
+	{
+		if(state!=State.ACTIVE)
+			return false;
+		state=State.AWAITING_RESCUE;
+		return true;
+	}
+
+	/**
+	 * Resumes an encounter after its caller accepts a rescuer.
+	 *
+	 * @return true if the encounter moved from awaiting rescue to active
+	 */
+	public synchronized boolean resume()
+	{
+		if(state!=State.AWAITING_RESCUE)
+			return false;
+		state=State.ACTIVE;
+		return true;
+	}
+
+	/**
+	 * Completes an active encounter or one whose rescue opportunity has ended.
+	 * Completion is terminal; pending encounters must first finish setup.
+	 *
+	 * @return true if the encounter moved to completed
 	 */
 	public synchronized boolean complete()
 	{
-		if(state!=State.ACTIVE)
+		if((state!=State.ACTIVE)&&(state!=State.AWAITING_RESCUE))
 			return false;
 		state=State.COMPLETED;
 		return true;
