@@ -72,12 +72,50 @@ public class GeneralEncounter implements Encounter
 	{
 		if((state!=State.ACTIVE)||(participant==null)||(participant!=getCurrentParticipant()))
 			return false;
+		participant.endTurn();
 		currentParticipantIndex++;
 		if(currentParticipantIndex==participants.size())
 		{
 			currentParticipantIndex=0;
 			round++;
 		}
+		getCurrentParticipant().beginTurn();
+		return true;
+	}
+
+	/**
+	 * Spends actions for an already-validated activity without attack or movement
+	 * usage. Spending the final action ends the turn.
+	 *
+	 * @param participant the active participant spending actions
+	 * @param cost a positive action cost
+	 * @return whether the resources were spent
+	 */
+	public synchronized boolean spendActions(final EncounterParticipant participant, final int cost)
+	{
+		return spendActions(participant,cost,false,0);
+	}
+
+	/**
+	 * Records resources for an already-validated activity atomically, before any
+	 * turn advancement. Action implementations remain responsible for validating
+	 * the activity itself; a legal attack that misses still records an attack.
+	 *
+	 * @param participant the active participant spending actions
+	 * @param cost a positive action cost
+	 * @param attack whether this activity counts as one attack
+	 * @param diagonalSteps the nonnegative number of actual diagonal steps
+	 * @return false without changing resources if the request is invalid
+	 */
+	public synchronized boolean spendActions(final EncounterParticipant participant, final int cost,
+			final boolean attack, final int diagonalSteps)
+	{
+		if((state!=State.ACTIVE)||(participant==null)||(participant!=getCurrentParticipant())
+		||(cost<=0)||(diagonalSteps<0)||(cost>participant.getActionsRemaining()))
+			return false;
+		participant.spendActions(cost,attack,diagonalSteps);
+		if(participant.getActionsRemaining()==0)
+			endTurn(participant);
 		return true;
 	}
 
@@ -94,6 +132,8 @@ public class GeneralEncounter implements Encounter
 		// Setup supplies the participant order; initiative rolling is separate.
 		currentParticipantIndex=participants.isEmpty()?-1:0;
 		state=State.ACTIVE;
+		if(getCurrentParticipant()!=null)
+			getCurrentParticipant().beginTurn();
 		return true;
 	}
 
@@ -134,6 +174,8 @@ public class GeneralEncounter implements Encounter
 	{
 		if((state!=State.ACTIVE)&&(state!=State.AWAITING_RESCUE))
 			return false;
+		if(currentParticipantIndex>=0)
+			participants.get(currentParticipantIndex).endTurn();
 		currentParticipantIndex=-1;
 		state=State.COMPLETED;
 		return true;
