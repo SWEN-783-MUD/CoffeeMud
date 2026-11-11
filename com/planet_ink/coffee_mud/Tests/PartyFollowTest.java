@@ -92,40 +92,18 @@ public class PartyFollowTest extends StdTest
 		}
 	}
 
-	/**
-	 * Gives a player enough native follower slots for the chain and its pet.
-	 *
-	 * @param character the player receiving test stats
-	 */
 	private static void giveRoomForFollowers(final MOB character)
 	{
 		character.baseCharStats().setStat(CharStats.STAT_CHARISMA, 24);
 		character.recoverCharStats();
 	}
 
-	/**
-	 * Forms membership through the registered invite and accept commands.
-	 *
-	 * @param leader the party leader
-	 * @param candidate the invited player
-	 */
 	private static void join(final TestPlayer leader, final TestPlayer candidate)
 	{
 		final String id = PartyInviteCommandTest.sentId(leader.command("PARTY", "INVITE", candidate.getMob().Name()));
 		check(candidate.command("PARTY", "ACCEPT", id).contains("You joined the party"), "The invite should join the candidate.");
 	}
 
-	/**
-	 * Tests aliases, chains, and unsuccessful replacements through commands and direct native writes.
-	 *
-	 * @param alice the root of the chain
-	 * @param bob the first follower
-	 * @param carol the second follower
-	 * @param dara the last follower
-	 * @param outsider a player in a different party
-	 * @param hall the shared room
-	 * @param side a separate room
-	 */
 	private static void checkFollowRules(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TestPlayer dara, final TestPlayer outsider, final FollowRoom hall, final Room side)
 	{
@@ -175,16 +153,6 @@ public class PartyFollowTest extends StdTest
 				&& bob.getMob().amFollowing() == alice.getMob(), "GROUP LEADER must not rewire player links.");
 	}
 
-	/**
-	 * Verifies that unfollow stops travel while native NOFOLLOW still dismisses followers.
-	 *
-	 * @param alice the root of the chain
-	 * @param bob the middle player
-	 * @param carol Bob's follower
-	 * @param hall the shared room
-	 * @param side the room Alice walks to
-	 * @param pet the NPC used for native dismissal checks
-	 */
 	private static void checkUnfollowAndDismissal(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final Room hall, final Room side, final MOB pet)
 	{
@@ -210,15 +178,6 @@ public class PartyFollowTest extends StdTest
 				&& carol.getMob().amFollowing() == bob.getMob(), "NOFOLLOW ALL must dismiss both player and NPC followers.");
 	}
 
-	/**
-	 * Checks direct-link cleanup on leave and through the session-ending seam.
-	 *
-	 * @param alice the party leader
-	 * @param bob the departing player
-	 * @param carol Bob's direct follower
-	 * @param dara a descendant whose link must survive
-	 * @param pet an NPC whose link is outside party cleanup
-	 */
 	private static void checkCleanup(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TestPlayer dara, final MOB pet)
 	{
@@ -246,14 +205,6 @@ public class PartyFollowTest extends StdTest
 				"Login should allow new links without restoring old ones.");
 	}
 
-	/**
-	 * Changes the target's party in a room callback between preflight and application.
-	 *
-	 * @param alice the target who leaves before the link is applied
-	 * @param bob the player attempting the switch
-	 * @param carol the old target
-	 * @param hall the room that runs the callback
-	 */
 	private static void checkLateRejection(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final FollowRoom hall)
 	{
@@ -268,13 +219,6 @@ public class PartyFollowTest extends StdTest
 		check(bob.getMob().amFollowing() == carol.getMob(), "An old dismissal must not clear a newer target.");
 	}
 
-	/**
-	 * Starts a follow through the named command word and verifies the native link.
-	 *
-	 * @param follower the player entering the command
-	 * @param target the expected follow target
-	 * @param word the command name or alias
-	 */
 	private static void follow(final TestPlayer follower, final TestPlayer target, final String word)
 	{
 		final String output = follower.command(word, target.getMob().Name());
@@ -284,10 +228,8 @@ public class PartyFollowTest extends StdTest
 	/** Runs a one-time veto or state change during a native room check. */
 	private static final class FollowRoom extends StdRoom
 	{
-		/** Whether to reject the next native follow attempt. */
 		private boolean vetoNextFollow;
 
-		/** A one-time change that runs after native validation. */
 		private Runnable beforeNextFollow;
 
 		/** {@inheritDoc} */
@@ -312,12 +254,6 @@ public class PartyFollowTest extends StdTest
 		}
 	}
 
-	/**
-	 * Stops a case with the expected result.
-	 *
-	 * @param condition whether the expected state was reached
-	 * @param message the result the case expected
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

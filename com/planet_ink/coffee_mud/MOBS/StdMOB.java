@@ -1787,12 +1787,7 @@ public class StdMOB implements MOB
 		}
 	}
 
-	/**
-	 * Updates the room fields without calling room or directory code.
-	 *
-	 * @param newRoom the room the character now occupies
-	 * @return the previous room
-	 */
+	// The party library calls this under its lock. Room and directory updates run outside it.
 	private Room publishLocation(final Room newRoom)
 	{
 		final Room previous = location;
@@ -4884,13 +4879,7 @@ public class StdMOB implements MOB
 		trySetFollowing(mob, null);
 	}
 
-	/**
-	 * Reports an applied link. Suppresses a stale event so room effects and observers
-	 * do not see a follow or dismissal that never happened.
-	 *
-	 * @param msg the native follow message
-	 * @param result whether its change went ahead
-	 */
+	// Suppress rejected events before they reach room effects and observers.
 	private void reportFollowChange(final CMMsg msg, final FollowResult result)
 	{
 		if(result == FollowResult.ALLOWED)
@@ -4904,13 +4893,6 @@ public class StdMOB implements MOB
 		}
 	}
 
-	/**
-	 * Applies party rules to player-to-player changes, including direct scripted writes.
-	 *
-	 * @param mob the new target, or {@code null} to detach
-	 * @param expectedTarget the link a dismissal was meant for, or {@code null} for any link
-	 * @return the reason the link was allowed or refused
-	 */
 	private FollowResult trySetFollowing(final MOB mob, final MOB expectedTarget)
 	{
 		if(mob == this)
@@ -4929,11 +4911,6 @@ public class StdMOB implements MOB
 		return FollowResult.ALLOWED;
 	}
 
-	/**
-	 * Replaces the native link and the matching follower list entries.
-	 *
-	 * @param mob the new target, or {@code null} to detach
-	 */
 	private void replaceFollowing(final MOB mob)
 	{
 		final MOB previous = amFollowing;

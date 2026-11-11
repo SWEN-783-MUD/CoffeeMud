@@ -20,13 +20,10 @@ import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 /** Runs both ways of joining through the live party library and command registry. */
 public class PartyInviteCommandTest extends StdTest
 {
-	/** The acceptance command shown to a recipient, including the invitation ID. */
 	private static final Pattern ACCEPT_COMMAND = Pattern.compile("PARTY ACCEPT ([0-9]+)");
 
-	/** The approval command shown to a leader, including the request ID. */
 	private static final Pattern APPROVE_COMMAND = Pattern.compile("PARTY APPROVE ([0-9]+)");
 
-	/** The ID shown to a sender after opening an invitation or request. */
 	private static final Pattern SENT_ID = Pattern.compile("(?:Invitation|Request) ID is ([0-9]+)");
 
 	/**
@@ -102,13 +99,6 @@ public class PartyInviteCommandTest extends StdTest
 		}
 	}
 
-	/**
-	 * Checks which commands pending shows to each side and verifies closure feedback.
-	 *
-	 * @param alice the party leader
-	 * @param bob a member who should not see or close Carol's entries
-	 * @param carol the character outside the party
-	 */
 	private static void runClosureWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
 	{
 		final String aliceName = alice.mob.Name();
@@ -155,14 +145,6 @@ public class PartyInviteCommandTest extends StdTest
 		return match.group(1);
 	}
 
-	/**
-	 * Checks cross-room joining, independent movement, and leadership through player commands.
-	 *
-	 * @param alice the party creator
-	 * @param bob the player receiving an invitation
-	 * @param hall Alice's room
-	 * @param passage Bob's room
-	 */
 	private static void runWalkthrough(final TestPlayer alice, final TestPlayer bob,
 			final Room hall, final Room passage)
 	{
@@ -219,13 +201,6 @@ public class PartyInviteCommandTest extends StdTest
 		check(CMLib.parties().findParty(bob.mob).getId() == joined.getId(), "Independent movement should keep membership.");
 	}
 
-	/**
-	 * Checks request output, explicit transfer, approval, and succession through the real commands.
-	 *
-	 * @param alice the original leader
-	 * @param bob the member who will take over from Alice
-	 * @param carol the character asking to join
-	 */
 	private static void runRequestWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
 	{
 		final String aliceName = alice.mob.Name();
@@ -290,13 +265,6 @@ public class PartyInviteCommandTest extends StdTest
 				"Alice should take over again because she was first to join.");
 	}
 
-	/**
-	 * Checks that a player in combat can read an entry but cannot complete it yet.
-	 *
-	 * @param player the actor to put in combat
-	 * @param action the pending action the fight should block
-	 * @param id the ID from the invitation or request notice
-	 */
 	private static void checkCombatRestriction(final TestPlayer player, final String action, final String id)
 	{
 		final Room room = player.mob.location();
@@ -323,10 +291,8 @@ public class PartyInviteCommandTest extends StdTest
 	/** Supplies a real player object with a session that captures command output. */
 	static final class TestPlayer implements AutoCloseable
 	{
-		/** The character that enters the commands. */
 		private final MOB mob = CMClass.getMOB("StdMOB");
 
-		/** The session registered for online lookup and used to read player messages. */
 		private final RecordingSession session = new RecordingSession();
 
 		/**
@@ -415,12 +381,6 @@ public class PartyInviteCommandTest extends StdTest
 		}
 	}
 
-	/**
-	 * Stops the walkthrough with the reason a check failed.
-	 *
-	 * @param condition whether the expected result occurred
-	 * @param message the result the walkthrough expected
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

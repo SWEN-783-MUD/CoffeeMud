@@ -126,14 +126,8 @@ public interface PartyLibrary extends CMLibrary
 		/** The proposed link would lead back to the follower or into a cycle. */
 		CYCLE("That would create a follow loop.");
 
-		/** The feedback to translate if this action is refused. */
 		private final String message;
 
-		/**
-		 * Associates the outcome with the message shown by the command.
-		 *
-		 * @param message the message, or {@code null} when the link is allowed
-		 */
 		private FollowResult(final String message)
 		{
 			this.message = message;

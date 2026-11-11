@@ -53,7 +53,6 @@ import com.planet_ink.coffee_mud.core.party.PartyTravel.Step;
 */
 public class MUDTracker extends StdLibrary implements TrackingLibrary
 {
-	/** Command flags that mark a move initiated by another actor or by the engine. */
 	private static final int FORCED_TRAVEL = MUDCmdProcessor.METAFLAG_FORCED | MUDCmdProcessor.METAFLAG_MPFORCED
 			| MUDCmdProcessor.METAFLAG_ORDER | MUDCmdProcessor.METAFLAG_POSSESSED;
 
@@ -69,20 +68,11 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 	/** Collects committed arrivals and failures for one independent command. */
 	private static final class TravelBatch
 	{
-		/** The service that owns party positions and follow links. */
 		private final PartyLibrary parties;
-		/** Actual arrivals, beginning with the initiator. */
 		private final List<Arrival> arrivals = new ArrayList<Arrival>();
-		/** Steps that failed or were skipped. */
 		private final List<Failure> failures = new ArrayList<Failure>();
-		/** The actual destination selected by the initiator's native move. */
 		private Room destination;
 
-		/**
-		 * Starts collecting outcomes for one traversal.
-		 *
-		 * @param parties the party service for this movement
-		 */
 		private TravelBatch(final PartyLibrary parties)
 		{
 			this.parties = parties;
@@ -1735,12 +1725,6 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		}
 	}
 
-	/**
-	 * Marks the captured tree before its first entry and clears it even after a failed move.
-	 *
-	 * @param step the current part of the captured tree
-	 * @param opening whether the batch is starting or closing
-	 */
 	private void markTravel(final Step step, final boolean opening)
 	{
 		if(opening)
@@ -1774,12 +1758,7 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return openTravel.containsKey(player);
 	}
 
-	/**
-	 * Delivers the completed snapshot after room callbacks and follow processing.
-	 * A listener failure cannot turn an already committed move into a failed one.
-	 *
-	 * @param completed the completed traversal
-	 */
+	// A listener failure cannot undo the committed move.
 	private void publishTravel(final Completed completed)
 	{
 		final EncounterManager manager = completed.destination.getEncounterManager();
@@ -2095,17 +2074,7 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return true;
 	}
 
-	/**
-	 * Places one captured traveler between the ordinary leave and enter messages.
-	 * The room can run callbacks without holding the party lock.
-	 *
-	 * @param batch the active traversal
-	 * @param step the character being placed
-	 * @param leaveMsg the native leave message
-	 * @param enterMsg the native entry message
-	 * @param suggestedSide the reverse direction calculated by native movement
-	 * @return whether placement succeeded
-	 */
+	// Run native room callbacks outside the party lock.
 	private boolean placePartyTraveler(final TravelBatch batch, final Step step, final CMMsg leaveMsg,
 			final CMMsg enterMsg, final int suggestedSide)
 	{
@@ -2161,14 +2130,6 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return true;
 	}
 
-	/**
-	 * Finds the real return connection, including asymmetric and one-way exits.
-	 *
-	 * @param source the room the traveler left
-	 * @param destination the room they actually entered
-	 * @param suggested the reverse direction from native movement
-	 * @return the return direction, or -1 for unknown
-	 */
 	private int arrivalSide(final Room source, final Room destination, final int suggested)
 	{
 		if((suggested >= 0) && (destination.getRoomInDir(suggested) == source))
@@ -2181,14 +2142,6 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		return ExplorationContext.UNKNOWN_ENTRY;
 	}
 
-	/**
-	 * Resolves each direct branch after its parent arrives.
-	 *
-	 * @param batch the active traversal
-	 * @param parent the step that just arrived
-	 * @param directionCode the exit direction
-	 * @param running whether to use running costs
-	 */
 	private void movePartyFollowers(final TravelBatch batch, final Step parent, final int directionCode, final boolean running)
 	{
 		final CMFlagLibrary flags = CMLib.flags();
@@ -2208,13 +2161,6 @@ public class MUDTracker extends StdLibrary implements TrackingLibrary
 		}
 	}
 
-	/**
-	 * Records a skipped branch without trying to move or detach its descendants.
-	 *
-	 * @param batch the active traversal
-	 * @param step the character who did not arrive
-	 * @param reason why this step stayed behind
-	 */
 	private void recordFailedBranch(final TravelBatch batch, final Step step, final FailureReason reason)
 	{
 		batch.failures.add(new Failure(step.player,CMStrings.capitalizeAndLower(step.player.Name()),reason));

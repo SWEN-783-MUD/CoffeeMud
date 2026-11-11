@@ -12,7 +12,6 @@ import com.planet_ink.coffee_mud.core.party.ExplorationContext.Activity;
 /** Lets a player check or change their own exploration activity. */
 public class Explore extends StdCommand
 {
-	/** The command word registered with CoffeeMud. */
 	private final String[] access = I(new String[] {"EXPLORE"});
 
 	/** {@inheritDoc} */
@@ -71,11 +70,6 @@ public class Explore extends StdCommand
 		return false;
 	}
 
-	/**
-	 * Shows both choices after a status check or an unknown activity.
-	 *
-	 * @param mob the player checking the command
-	 */
 	private void showChoices(final MOB mob)
 	{
 		mob.tell(L("Use EXPLORE NORMAL or EXPLORE AVOID NOTICE."));

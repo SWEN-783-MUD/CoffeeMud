@@ -74,14 +74,7 @@ public class EncounterManager
 		return canOpen(player,target) && !CMLib.tracking().isPartyTravelInProgress(player);
 	}
 
-	/**
-	 * Rechecks room and participant state before opening the slot.
-	 * Call while holding the manager lock.
-	 *
-	 * @param player the player initiating the encounter
-	 * @param target the NPC they would face
-	 * @return whether the room can open this encounter
-	 */
+	// Call with the encounter manager lock held.
 	private boolean canOpen(final MOB player, final MOB target)
 	{
 		return (encounter==null)

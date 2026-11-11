@@ -19,15 +19,8 @@ public final class ExplorationContext
 		/** The text a player types after EXPLORE. */
 		public final String command;
 
-		/** The activity name shown to players. */
 		public final String label;
 
-		/**
-		 * Gives an activity its command and display names.
-		 *
-		 * @param command the words accepted by EXPLORE
-		 * @param label the name displayed to players
-		 */
 		private Activity(final String command, final String label)
 		{
 			this.command = command;

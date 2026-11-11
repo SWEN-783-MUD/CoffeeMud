@@ -14,7 +14,6 @@ public class EncounterParticipant
 	/** The player or NPC represented by this participant. */
 	private final MOB mob;
 
-	/** The player's approach at setup, if one was supplied. */
 	private final ExplorationContext approach;
 
 	/**

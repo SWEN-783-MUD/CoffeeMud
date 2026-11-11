@@ -14,7 +14,6 @@ jobs:
     timeout-minutes: 12
 
     steps:
-      # Match the tools used to run the test launcher locally.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -28,7 +27,6 @@ jobs:
         with:
           python-version: '3.13'
 
-      # Check the launcher before it starts the game server.
       - name: Check launcher isolation and reporting
         run: python -m unittest discover -s tests -p test_launcher.py -v
 

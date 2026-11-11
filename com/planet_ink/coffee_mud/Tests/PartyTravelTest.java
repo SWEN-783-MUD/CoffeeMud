@@ -98,13 +98,6 @@ public class PartyTravelTest extends StdTest
 		}
 	}
 
-	/**
-	 * Gives a fixture room an ID for native exit resolution.
-	 *
-	 * @param room the test room
-	 * @param area its temporary area
-	 * @param name the local room name
-	 */
 	private static void setUpRoom(final Room room, final Area area, final String name)
 	{
 		room.setArea(area);
@@ -112,25 +105,12 @@ public class PartyTravelTest extends StdTest
 		room.setDisplayText(name);
 	}
 
-	/**
-	 * Adds a single directed exit.
-	 *
-	 * @param source the room with the exit
-	 * @param direction the direction used to leave it
-	 * @param destination the connected room
-	 */
 	private static void connect(final Room source, final int direction, final Room destination)
 	{
 		source.setRawExit(direction, CMClass.getExit("Open"));
 		source.rawDoors()[direction] = destination;
 	}
 
-	/**
-	 * Creates a party and gives the players native follower capacity.
-	 *
-	 * @param leader the character creating the party
-	 * @param members the other players in the party
-	 */
 	private static void makeParty(final TestPlayer leader, final TestPlayer... members)
 	{
 		check(leader.command("PARTY", "CREATE").contains("You created a party"), "Alice should create a party.");
@@ -143,18 +123,6 @@ public class PartyTravelTest extends StdTest
 		}
 	}
 
-	/**
-	 * Checks parent-first placement, the entry boundary, and a non-following party member.
-	 *
-	 * @param alice the independent traveler
-	 * @param bob the first branch
-	 * @param carol Bob's follower
-	 * @param dara the second branch
-	 * @param eve a party member who is scouting independently
-	 * @param hall the source
-	 * @param guardroom the destination
-	 * @param completed the consumer's snapshots
-	 */
 	private static void checkCompletedArrivals(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TestPlayer dara, final TestPlayer eve, final TravelRoom hall, final TravelRoom guardroom,
 			final List<Completed> completed)
@@ -177,17 +145,6 @@ public class PartyTravelTest extends StdTest
 				"Automatic steps must retain their links.");
 	}
 
-	/**
-	 * Blocks Bob's exit and checks that only his branch stops.
-	 *
-	 * @param alice the independent traveler
-	 * @param bob the blocked follower
-	 * @param carol Bob's follower
-	 * @param dara the successful branch
-	 * @param hall the source
-	 * @param guardroom the destination
-	 * @param completed the consumer's snapshots
-	 */
 	private static void checkBlockedBranch(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TestPlayer dara, final TravelRoom hall, final TravelRoom guardroom, final List<Completed> completed)
 	{
@@ -208,17 +165,6 @@ public class PartyTravelTest extends StdTest
 		guardroom.blocked = null;
 	}
 
-	/**
-	 * Compares successful, failed, and forced movement with an existing outgoing link.
-	 *
-	 * @param alice the player's original follow target
-	 * @param bob the character traveling independently
-	 * @param carol Bob's follower
-	 * @param hall the source
-	 * @param guardroom the north destination
-	 * @param ledge a one-way exit destination
-	 * @param completed the consumer's snapshots
-	 */
 	private static void checkIndependentTravel(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TravelRoom hall, final TravelRoom guardroom, final TravelRoom ledge, final List<Completed> completed)
 	{
@@ -246,19 +192,6 @@ public class PartyTravelTest extends StdTest
 				"A one-way entry must report an unknown return side.");
 	}
 
-	/**
-	 * Lets another thread leave or end a session after a follower was removed
-	 * from the source but before the final placement.
-	 *
-	 * @param alice the independent traveler
-	 * @param bob the follower whose state changes
-	 * @param carol Bob's captured descendant
-	 * @param dara an unrelated successful branch
-	 * @param hall the source
-	 * @param guardroom the destination
-	 * @param completed the consumer's snapshots
-	 * @param disconnect whether to end Bob's session rather than leave the party
-	 */
 	private static void checkDepartureDuringTravel(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol,
 			final TestPlayer dara, final TravelRoom hall, final TravelRoom guardroom,
 			final List<Completed> completed, final boolean disconnect)
@@ -303,14 +236,6 @@ public class PartyTravelTest extends StdTest
 		}
 	}
 
-	/**
-	 * Places the players back in the source and resets the recording fixtures.
-	 *
-	 * @param source the room for the next case
-	 * @param destination the room recording entry messages
-	 * @param completed the completed-batch recording
-	 * @param players the players returning to the source
-	 */
 	private static void reset(final Room source, final TravelRoom destination, final List<Completed> completed,
 			final TestPlayer... players)
 	{
@@ -324,12 +249,6 @@ public class PartyTravelTest extends StdTest
 		completed.clear();
 	}
 
-	/**
-	 * Ensures the native link points to the intended target.
-	 *
-	 * @param follower the player who wants to follow
-	 * @param target the player they should follow
-	 */
 	private static void follow(final TestPlayer follower, final TestPlayer target)
 	{
 		if(follower.getMob().amFollowing() != target.getMob())
@@ -337,24 +256,12 @@ public class PartyTravelTest extends StdTest
 		check(follower.getMob().amFollowing() == target.getMob(), "The follow link should be set before travel.");
 	}
 
-	/**
-	 * Checks that the consumer was notified exactly once.
-	 *
-	 * @param completed the consumer's recording
-	 * @return the only recorded batch
-	 */
 	private static Completed onlyBatch(final List<Completed> completed)
 	{
 		check(completed.size() == 1, "Exactly one completion should be published. Received " + completed.size());
 		return completed.get(0);
 	}
 
-	/**
-	 * Compares actual arrivals against the expected parent-first order.
-	 *
-	 * @param batch the snapshot delivered to the consumer
-	 * @param players the characters expected to have arrived, in order
-	 */
 	private static void checkArrivals(final Completed batch, final TestPlayer... players)
 	{
 		final List<MOB> expected = Arrays.stream(players).map(TestPlayer::getMob).collect(Collectors.toList());
@@ -365,11 +272,8 @@ public class PartyTravelTest extends StdTest
 	/** Records native entry messages and controls one veto or concurrent departure. */
 	private static final class TravelRoom extends StdRoom
 	{
-		/** The coordinated enter messages seen by this room. */
 		private final List<MOB> entries = new ArrayList<MOB>();
-		/** The follower the room refuses to admit, if any. */
 		private MOB blocked;
-		/** The follower whose leave message runs the one-time callback. */
 		private MOB interruptLeaveFor;
 		/** A one-time state change during native leave handling. */
 		private Runnable duringLeave;
@@ -399,12 +303,6 @@ public class PartyTravelTest extends StdTest
 		}
 	}
 
-	/**
-	 * Fails the current case with its expected behavior.
-	 *
-	 * @param condition whether the condition was reached
-	 * @param message the expected outcome
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

@@ -18,7 +18,6 @@ public final class HostTestRunnerContractTest
 	/** A small test with a caller-supplied body and observable cleanup. */
 	private static final class Example extends StdTest
 	{
-		/** The code to run when the harness calls {@code doTest}. */
 		private final Callable<String> action;
 
 		/** Lets the caller wait for cleanup after requesting cancellation. */
@@ -27,7 +26,6 @@ public final class HostTestRunnerContractTest
 		/** Number of cleanup calls made by the test worker. */
 		private int cleanupCount;
 
-		/** Whether the cleanup after the test should throw an error. */
 		private boolean failCleanup;
 
 		/**
@@ -91,13 +89,6 @@ public final class HostTestRunnerContractTest
 		}
 	}
 
-	/**
-	 * Fails this harness check if an expected result is missing.
-	 *
-	 * @param condition whether the expectation was met
-	 * @param message what went wrong if the expectation failed
-	 * @throws AssertionError if the condition is false
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

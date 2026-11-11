@@ -62,7 +62,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		/** Increments when the outgoing target changes. */
 		private long follow;
 
-		/** The character's selection, which carries across room changes. */
 		private Activity activity = Activity.NORMAL;
 
 		/** The direction back through the entry into the current room, if known. */
@@ -71,11 +70,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		/** Increments on an activity or approach change. */
 		private long explorationRevision;
 
-		/**
-		 * Changes the activity without losing the current entry side.
-		 *
-		 * @param selection the new activity
-		 */
 		private void selectActivity(final Activity selection)
 		{
 			if(activity != selection)
@@ -85,7 +79,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			}
 		}
 
-		/** Clears the last session's activity and approach as one change. */
 		private void resetSession()
 		{
 			if((activity != Activity.NORMAL) || (entrySide != ExplorationContext.UNKNOWN_ENTRY))
@@ -96,13 +89,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			}
 		}
 
-		/**
-		 * Takes a fixed view using the character's location at the time of the call.
-		 * The stored state does not need to keep a reference to the room.
-		 *
-		 * @param room the character's current room
-		 * @return the exploration context at this point
-		 */
 		private ExplorationContext snapshot(final Room room)
 		{
 			return new ExplorationContext(activity,room,entrySide,explorationRevision);
@@ -213,12 +199,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Uses the character's real name so the lookup works across sessions.
-	 *
-	 * @param character the player whose name is needed
-	 * @return the canonical character key used by the store
-	 */
 	private String characterKey(final MOB character)
 	{
 		return CMStrings.capitalizeAndLower(character.Name());
@@ -261,15 +241,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Runs a store operation with the actor's current name. Callers send feedback
-	 * after this method returns so session and room code run outside the lock.
-	 *
-	 * @param <T> the operation's result type
-	 * @param actor the character acting on party state
-	 * @param operation the store operation using the current key
-	 * @return the result, or {@code null} if the actor is unavailable
-	 */
+	// Send feedback after this returns so session and room code run outside characterLock.
 	private <T> T withCharacter(final MOB actor, final Function<String, T> operation)
 	{
 		synchronized(characterLock)
@@ -278,13 +250,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Checks whether a live object can still act under its character name.
-	 * Call this while holding characterLock.
-	 *
-	 * @param character the actor or target to check
-	 * @return whether the player object can use party state
-	 */
+	// Call with characterLock held so a deleted character cannot act under a reused name.
 	private boolean canUseCharacter(final MOB character)
 	{
 		return isPlayerCharacter(character) && !character.amDestroyed() && !retiredCharacters.contains(character);
@@ -355,14 +321,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Records a known approach and the location change as one context update.
-	 * Call while holding characterLock. Same-room moves keep the current approach.
-	 *
-	 * @param player the character entering the room
-	 * @param destination the room entered
-	 * @param entrySide the actual return direction, or {@link ExplorationContext#UNKNOWN_ENTRY}
-	 */
+	// Call with characterLock held. Same-room moves keep the current approach.
 	private void placeFromExit(final MOB player, final Room destination, final int entrySide)
 	{
 		final Room source = player.location();
@@ -373,12 +332,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			travelState(player).entrySide = entrySide;
 	}
 
-	/**
-	 * Looks up a live character's travel state while holding characterLock.
-	 *
-	 * @param player the character whose travel state is needed
-	 * @return their state, initialized on first use
-	 */
+	// Call with characterLock held.
 	private CharacterTravelState travelState(final MOB player)
 	{
 		return travelStates.computeIfAbsent(player, key -> new CharacterTravelState());
@@ -402,16 +356,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Takes a parent-first snapshot of the native party links under characterLock.
-	 *
-	 * @param player the character at this step
-	 * @param parent the player's follow target, or null for the root
-	 * @param source the room the root is leaving
-	 * @param party the captured roster, if any
-	 * @param seen the characters already captured
-	 * @return the step and its captured children
-	 */
+	// Capture the native follow links parent-first while holding characterLock.
 	private Step captureStep(final MOB player, final MOB parent, final Room source, final PartySnapshot party,
 			final Set<MOB> seen)
 	{
@@ -512,13 +457,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Verifies a captured step before any position write. Call this while holding characterLock.
-	 *
-	 * @param step the captured traveler
-	 * @param destination the room they would enter
-	 * @return whether the current position and branch still match
-	 */
+	// Call with characterLock held before writing a new position.
 	private boolean isCurrentStep(final Step step, final Room destination)
 	{
 		if((destination == null) || (step.startingRoom != step.source) || !isOriginalPosition(step))
@@ -530,12 +469,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				&& (travelState(step.parent).position == step.parentPositionRevision + 1);
 	}
 
-	/**
-	 * Verifies that a session still owns the original position. Call this while holding characterLock.
-	 *
-	 * @param step the captured traveler
-	 * @return whether they are still in the same position with the same session
-	 */
+	// Call with characterLock held.
 	private boolean isOriginalPosition(final Step step)
 	{
 		return canStartFollowing(step.player) && (step.player.session() == step.session)
@@ -543,12 +477,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				&& (travelState(step.player).position == step.positionRevision);
 	}
 
-	/**
-	 * Verifies the original party and outgoing link while holding characterLock.
-	 *
-	 * @param step the captured follower
-	 * @return whether the original party link is still in effect
-	 */
+	// Call with characterLock held.
 	private boolean isOriginalFollow(final Step step)
 	{
 		if((step.player.amFollowing() != step.parent) || (travelState(step.player).follow != step.followRevision))
@@ -558,14 +487,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				&& party.getMembers().contains(characterKey(step.parent));
 	}
 
-	/**
-	 * Checks the current session, rooms, roster, and native follow chain.
-	 * Call this while holding characterLock.
-	 *
-	 * @param follower the player starting to follow
-	 * @param target the player they want to follow
-	 * @return the first reason to refuse the change, or {@link FollowResult#ALLOWED}
-	 */
+	// Call with characterLock held.
 	private FollowResult validateFollow(final MOB follower, final MOB target)
 	{
 		if(follower == target)
@@ -610,12 +532,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		return FollowResult.ALLOWED;
 	}
 
-	/**
-	 * Checks that a player can take part in a new link. Call this while holding characterLock.
-	 *
-	 * @param player the follower or target
-	 * @return whether the character has an active session and is staying in the game
-	 */
+	// Call with characterLock held.
 	private boolean canStartFollowing(final MOB player)
 	{
 		if(!canUseCharacter(player) || departingFollowers.contains(player))
@@ -657,12 +574,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Clears the player's direct links to their current party. Call this before
-	 * removing their roster entry and while holding characterLock.
-	 *
-	 * @param player the member leaving or disconnecting
-	 */
+	// Call with characterLock held before removing the roster entry.
 	private void clearPartyLinks(final MOB player)
 	{
 		final PartySnapshot party = store.findByMember(characterKey(player));
@@ -977,13 +889,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		closePendingEntry(actor, entryId, false);
 	}
 
-	/**
-	 * Closes an entry and captures the other side before either name can change.
-	 *
-	 * @param actor the player who entered the command
-	 * @param entryId the entry to close
-	 * @param declined whether the actor is responding or withdrawing
-	 */
 	private void closePendingEntry(final MOB actor, final long entryId, final boolean declined)
 	{
 		final PendingView closed;
@@ -1005,14 +910,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		reportClosedEntry(actor, closed, other, declined);
 	}
 
-	/**
-	 * Reports the closure to the actor and to the other side if they are online.
-	 *
-	 * @param actor the player who entered the command
-	 * @param closed the entry closed by the store, or {@code null} if unavailable
-	 * @param other the player on the other side, or {@code null} if offline
-	 * @param declined whether the actor turned it down or withdrew it
-	 */
 	private void reportClosedEntry(final MOB actor, final PendingView closed, final MOB other, final boolean declined)
 	{
 		if(closed == null)
@@ -1032,14 +929,6 @@ public class CMParties extends StdLibrary implements PartyLibrary
 					: L("@x1 cancelled the @x2 (ID @x3).", actor.Name(), type, id));
 	}
 
-	/**
-	 * Explains the outcome of an acceptance or approval after the store finishes.
-	 *
-	 * @param actor the player who entered the command
-	 * @param result the outcome from the store
-	 * @param type the entry type handled by the command
-	 * @param candidate the newly approved player, if online
-	 */
 	private void reportJoinResult(final MOB actor, final JoinResult result, final Type type, final MOB candidate)
 	{
 		final boolean approval = type == Type.REQUEST;
@@ -1075,12 +964,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		}
 	}
 
-	/**
-	 * Checks the actor with characterLock held so encounter opening and the command cannot cross.
-	 *
-	 * @param character the actor trying to make the change
-	 * @return whether the player can make the change now
-	 */
+	// Call with characterLock held so encounter opening and the command cannot cross.
 	private boolean canManageParty(final MOB character)
 	{
 		if(!isPlayerCharacter(character))
@@ -1100,14 +984,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		return true;
 	}
 
-	/**
-	 * Finds an active player in this game by their exact character name.
-	 * The session list includes players in other rooms and checks that they are in-game.
-	 * Call this while holding characterLock so the returned object matches its name.
-	 *
-	 * @param name the character name supplied by a player
-	 * @return the live character, or {@code null} if nobody matches
-	 */
+	// Call with characterLock held so the returned player still matches the name.
 	private MOB findOnlinePlayer(final String name)
 	{
 		for(final Session session : CMLib.sessions().localOnlineIterableAllHosts())

@@ -69,11 +69,6 @@ public class PartyRequestTest extends StdTest
 		System.out.println("PASS: Party request fixture.");
 	}
 
-	/**
-	 * Starts a fresh store for each request scenario.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void runCases() throws Exception
 	{
 		originalEntryStaysOpen();
@@ -87,7 +82,6 @@ public class PartyRequestTest extends StdTest
 		transferKeepsOrderAndPending();
 	}
 
-	/** Checks both command orders, a repeat request, and replacement at the exact deadline. */
 	private static void originalEntryStaysOpen()
 	{
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
@@ -117,11 +111,6 @@ public class PartyRequestTest extends StdTest
 				"The retired invitation ID must not act on the replacement.");
 	}
 
-	/**
-	 * Releases an invitation and request for the same candidate at the same time.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void crossedStartsShareOneEntry() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
@@ -143,7 +132,6 @@ public class PartyRequestTest extends StdTest
 		check(store.findByMember("Bob") == null, "Opening either entry must leave the seat free.");
 	}
 
-	/** Checks who can see and approve a request before and after the leader leaves. */
 	private static void currentLeaderOwnsApproval()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -173,7 +161,6 @@ public class PartyRequestTest extends StdTest
 				"Carol should be added once at the end of the roster.");
 	}
 
-	/** Checks expiry at approval time and retirement when the party disappears. */
 	private static void expiredAndRemovedRequestsStayRetired()
 	{
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
@@ -196,11 +183,6 @@ public class PartyRequestTest extends StdTest
 				"Only the new request should remain available.");
 	}
 
-	/**
-	 * Checks that only one request can take the last seat, and that the other can be retried.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void competingApprovalsRespectCapacity() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 2);
@@ -223,11 +205,6 @@ public class PartyRequestTest extends StdTest
 				"The leader can approve the original request once a seat opens.");
 	}
 
-	/**
-	 * Checks that a join retires competing entries of both types for the candidate.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void competingPartiesAdmitCandidateOnce() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -247,7 +224,6 @@ public class PartyRequestTest extends StdTest
 				&& store.pendingEntries("Bob").isEmpty(), "Joining must retire all of Bob's pending entries.");
 	}
 
-	/** Checks who can decline or cancel each entry type and what a later retry sees. */
 	private static void eachSideCanCloseItsOwnEntries()
 	{
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
@@ -290,11 +266,6 @@ public class PartyRequestTest extends StdTest
 		check(store.findByMember("Bob") == null, "Closing entries must leave Bob outside the party.");
 	}
 
-	/**
-	 * Races a candidate's withdrawal against the leader's approval.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void closingAndJoiningHaveOneWinner() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -310,7 +281,6 @@ public class PartyRequestTest extends StdTest
 				"Either winning operation should retire the request.");
 	}
 
-	/** Checks transfer permissions, pending IDs and deadlines, and succession after transfer. */
 	private static void transferKeepsOrderAndPending()
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
@@ -346,14 +316,6 @@ public class PartyRequestTest extends StdTest
 				"If Bob leaves, Alice still joined first and takes over.");
 	}
 
-	/**
-	 * Opens a request in a case that expects a new entry.
-	 *
-	 * @param store the case's store
-	 * @param candidate the character asking to join
-	 * @param leader the leader they name
-	 * @return the new request
-	 */
 	private static PartyPendingEntry sendRequest(final PartyStore store, final String candidate, final String leader)
 	{
 		final PendingResult result = store.requestJoin(candidate, leader);
@@ -361,13 +323,6 @@ public class PartyRequestTest extends StdTest
 		return result.getEntry();
 	}
 
-	/**
-	 * Checks that a crossed or repeated command leaves the original entry intact.
-	 *
-	 * @param repeat the result of the second command
-	 * @param original the first entry
-	 * @param type the first entry's expected type
-	 */
 	private static void checkSameEntry(final PendingResult repeat, final PartyPendingEntry original, final Type type)
 	{
 		check(repeat.getStatus() == PendingStatus.ALREADY_PENDING, "The second command should find the first entry.");
@@ -376,12 +331,6 @@ public class PartyRequestTest extends StdTest
 				&& entry.getExpiresAt().equals(original.getExpiresAt()), "The type, ID, and deadline must stay the same.");
 	}
 
-	/**
-	 * Stops a case with the reason it failed.
-	 *
-	 * @param condition whether the expected state was reached
-	 * @param message the result the case expected
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

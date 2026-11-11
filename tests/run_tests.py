@@ -110,7 +110,6 @@ def prepare_runtime(runtime: Path) -> None:
         "LOGNAME": "ci",
     }
 
-    # Apply test settings to a copy of the usual server configuration.
     ini = (REPO / "coffeemud.ini").read_text(encoding="utf-8")
     for key, value in settings.items():
         pattern = rf"^{key}=.*$"
@@ -130,7 +129,6 @@ def compile_sources(runtime: Path, run_dir: Path) -> str:
     source_list = run_dir / "sources.txt"
     source_list.write_text("\n".join(f'"{source.as_posix()}"' for source in sources), encoding="utf-8")
 
-    # Match the project's Java target and place classes where the host looks for them.
     classpath = os.pathsep.join(str(runtime / "lib" / jar) for jar in ("js.jar", "jzlib.jar"))
     command = [
         java_tool("javac"),
@@ -154,7 +152,6 @@ def check_report(report: Path) -> int:
     if not report.is_file():
         raise RuntimeError("The host exited without results.xml. This is a failed run.")
 
-    # Check the number of test cases against the suite's summary.
     suite = ET.parse(report).getroot()
     cases = suite.findall("testcase")
     if not cases or int(suite.attrib["tests"]) != len(cases):
@@ -251,7 +248,6 @@ def main() -> int:
                 runtime, run_dir / "expected-failure.log", 20, expected=1,
             )
 
-        # Run the fast checks before starting the server.
         fixtures = () if args.skip_standalone else ("PartyMembershipTest", "PartyCommandTest")
         for fixture in fixtures:
             run_step(

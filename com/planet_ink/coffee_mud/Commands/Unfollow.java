@@ -8,7 +8,6 @@ import com.planet_ink.coffee_mud.core.CMLib;
 /** Stops the caller from following while leaving their own followers and party in place. */
 public class Unfollow extends StdCommand
 {
-	/** The standalone command word, separate from NOFOLLOW. */
 	private final String[] access = I(new String[] {"UNFOLLOW"});
 
 	/** {@inheritDoc} */

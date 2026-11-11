@@ -12,7 +12,6 @@ import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 /** Reads PARTY commands and sends the requested action to the party library. */
 public class Party extends StdCommand
 {
-	/** The command name registered with CoffeeMud. */
 	private final String[] access = I(new String[] {"PARTY"});
 
 	/**
@@ -70,7 +69,6 @@ public class Party extends StdCommand
 			return false;
 		}
 
-		// Separate the commands that take a name or ID from those that take no argument.
 		final String action = commands.get(1).toUpperCase(Locale.ROOT);
 		if(commands.size() == 3)
 		{
@@ -104,14 +102,6 @@ public class Party extends StdCommand
 		return false;
 	}
 
-	/**
-	 * Runs a party action that takes one character name or pending ID.
-	 *
-	 * @param mob the player entering the command
-	 * @param parties the library handling the change
-	 * @param action the action word in uppercase
-	 * @param argument the name or ID supplied by the player
-	 */
 	private void executeWithArgument(final MOB mob, final PartyLibrary parties,
 			final String action, final String argument)
 	{
@@ -156,12 +146,6 @@ public class Party extends StdCommand
 		}
 	}
 
-	/**
-	 * Reports the result of creating a party.
-	 *
-	 * @param mob the player creating the party
-	 * @param parties the library handling the change
-	 */
 	private void createParty(final MOB mob, final PartyLibrary parties)
 	{
 		switch(parties.createParty(mob))
@@ -181,14 +165,6 @@ public class Party extends StdCommand
 		}
 	}
 
-	/**
-	 * Reads a positive pending ID and gives usage help if it is invalid.
-	 *
-	 * @param mob the player acting on an entry
-	 * @param action the action word in uppercase
-	 * @param idText the ID typed by the player
-	 * @return the valid ID, or zero if the input was invalid
-	 */
 	private long readPendingId(final MOB mob, final String action, final String idText)
 	{
 		try
@@ -206,11 +182,6 @@ public class Party extends StdCommand
 		return 0;
 	}
 
-	/**
-	 * Lists the supported forms after invalid input.
-	 *
-	 * @param mob the player who needs help
-	 */
 	private void showUsage(final MOB mob)
 	{
 		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY LEADER <name>, PARTY INVITE <name>, PARTY REQUEST <leader>, "

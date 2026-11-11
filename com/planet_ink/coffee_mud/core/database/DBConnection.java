@@ -583,15 +583,6 @@ public class DBConnection
 		return update(updateString, 0, false);
 	}
 
-	/**
-	 * Executes a write and optionally queues a failed statement for retry.
-	 *
-	 * @param updateString the SQL update to execute
-	 * @param retryNum how many times the queued statement has been retried
-	 * @param queueOnFailure whether this statement can run again later on its own
-	 * @return the affected row count, or a negative value if the connection could not run it
-	 * @throws SQLException if the write fails
-	 */
 	private int update(final String updateString, final int retryNum, final boolean queueOnFailure)
 		throws SQLException
 	{

@@ -23,7 +23,6 @@ public class GeneralEncounter implements Encounter
 		COMPLETED
 	}
 
-	/** Fixed roster captured when the room opens the encounter. */
 	private final List<EncounterParticipant> participants;
 	/** Phase reads must be safe while the party library holds its character lock. */
 	private volatile State state=State.PENDING;

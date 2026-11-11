@@ -25,25 +25,18 @@ public final class InMemoryPartyStore implements PartyStore
 	/** The usual number of members, including the leader. */
 	public static final int DEFAULT_MEMBER_LIMIT = 6;
 
-	/** The clock used to issue and check deadlines. */
 	private final Supplier<Instant> clock;
 
-	/** How long a new pending entry stays open. */
 	private final Duration pendingLifetime;
 
-	/** The maximum number of members in a party. */
 	private final int memberLimit;
 
-	/** The current immutable roster for each party ID. */
 	private final Map<Long, PartySnapshot> partiesById = new HashMap<Long, PartySnapshot>();
 
-	/** The party ID for each character who belongs to a party. */
 	private final Map<String, Long> partyIdsByMember = new HashMap<String, Long>();
 
-	/** Entries that have not been retired, in the order they were opened. */
 	private final Map<Long, PartyPendingEntry> entriesById = new LinkedHashMap<Long, PartyPendingEntry>();
 
-	/** The next party ID to assign. A recreated party gets a new ID. */
 	private long nextPartyId = 1;
 
 	/** The next pending ID. Retiring an entry does not free its ID for reuse. */
@@ -256,16 +249,6 @@ public final class InMemoryPartyStore implements PartyStore
 		return openEntry(leaderKey, candidateKey, Type.REQUEST);
 	}
 
-	/**
-	 * Checks the party and candidate before opening a pending entry.
-	 * Call this while holding the store lock so two starts cannot create separate entries.
-	 *
-	 * @param leaderKey the leader supplied by the caller
-	 * @param candidateKey the character who would join
-	 * @param type whether the leader or candidate started the entry
-	 * @return the outcome and any new or existing entry
-	 * @throws NullPointerException if either character key is null
-	 */
 	private PendingResult openEntry(final String leaderKey, final String candidateKey, final Type type)
 	{
 		Objects.requireNonNull(candidateKey);
@@ -342,15 +325,6 @@ public final class InMemoryPartyStore implements PartyStore
 		return join(Objects.requireNonNull(leaderKey), requestId, Type.REQUEST);
 	}
 
-	/**
-	 * Validates the entry and updates both membership lookups under the store lock.
-	 * On success all competing entries are retired. A full party leaves the entry open.
-	 *
-	 * @param actorKey the character acting on the entry
-	 * @param entryId the ID supplied by the actor
-	 * @param type the type accepted by the command
-	 * @return the outcome and the new member key on success
-	 */
 	private JoinResult join(final String actorKey, final long entryId, final Type type)
 	{
 		// Check authority before inspecting expiry so someone else's ID reveals no details.
@@ -399,15 +373,6 @@ public final class InMemoryPartyStore implements PartyStore
 		return closeEntry(actorKey, entryId, false);
 	}
 
-	/**
-	 * Retires a live entry while holding the same lock used for acceptance and approval.
-	 * An unavailable result gives no details about another character's entry.
-	 *
-	 * @param actorKey the character acting on the entry
-	 * @param entryId the ID supplied by the actor
-	 * @param decline whether the actor is responding or withdrawing
-	 * @return the closed entry, or {@code null} if the actor cannot close it
-	 */
 	private PendingView closeEntry(final String actorKey, final long entryId, final boolean decline)
 	{
 		Objects.requireNonNull(actorKey);
@@ -431,35 +396,16 @@ public final class InMemoryPartyStore implements PartyStore
 		return expired ? null : new PendingView(entry, party.getLeader());
 	}
 
-	/**
-	 * Identifies who can accept, approve, or decline the entry.
-	 *
-	 * @param entry the invitation or request
-	 * @param party the current roster of the party that owns the entry
-	 * @return the candidate for an invitation or the current leader for a request
-	 */
 	private String responderKey(final PartyPendingEntry entry, final PartySnapshot party)
 	{
 		return entry.getType() == Type.INVITATION ? entry.getCandidateKey() : party.getLeader();
 	}
 
-	/**
-	 * Retires every entry with a deadline at or before the given time.
-	 * Call this while holding the store lock.
-	 *
-	 * @param now the current time for this operation
-	 */
 	private void removeExpiredEntries(final Instant now)
 	{
 		entriesById.values().removeIf(entry -> entry.isExpired(now));
 	}
 
-	/**
-	 * Retires a candidate's entries after they create or join a party.
-	 * Call this while holding the store lock.
-	 *
-	 * @param characterKey the candidate whose entries are no longer usable
-	 */
 	private void clearCandidateEntries(final String characterKey)
 	{
 		entriesById.values().removeIf(entry -> characterKey.equals(entry.getCandidateKey()));

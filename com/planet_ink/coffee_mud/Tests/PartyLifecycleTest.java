@@ -63,11 +63,6 @@ public class PartyLifecycleTest extends StdTest
 		}
 	}
 
-	/**
-	 * Exercises separate characters on one account through the real party commands.
-	 *
-	 * @param room the temporary host room
-	 */
 	private static void checkSharedAccount(final Room room)
 	{
 		final String suffix = UUID.randomUUID().toString().substring(0,8);
@@ -109,11 +104,6 @@ public class PartyLifecycleTest extends StdTest
 		System.out.println("PASS: Party lifecycle store cases.");
 	}
 
-	/**
-	 * Gives each party-state scenario a fresh store.
-	 *
-	 * @throws Exception if either race worker fails or times out
-	 */
 	private static void runStoreCases() throws Exception
 	{
 		renameKeepsPartyAndPendingEntries();
@@ -121,7 +111,6 @@ public class PartyLifecycleTest extends StdTest
 		deletionRacingApprovalClearsReusedName();
 	}
 
-	/** Checks roster order, invitation sender, and request candidate after rename. */
 	private static void renameKeepsPartyAndPendingEntries()
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
@@ -156,7 +145,6 @@ public class PartyLifecycleTest extends StdTest
 				"The renamed candidate should still be able to accept.");
 	}
 
-	/** Checks succession and keeps an old sender name from carrying over to a replacement. */
 	private static void deletingLeaderKeepsPartyEntries()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -187,11 +175,6 @@ public class PartyLifecycleTest extends StdTest
 				"Deleting the last member should retire that party's entries.");
 	}
 
-	/**
-	 * Releases an approval and candidate deletion together, then reuses the name.
-	 *
-	 * @throws Exception if either race worker fails or times out
-	 */
 	private static void deletionRacingApprovalClearsReusedName() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -215,10 +198,7 @@ public class PartyLifecycleTest extends StdTest
 				"Old pending IDs cannot admit a replacement character.");
 	}
 
-	/**
-	 * Runs successful and unsuccessful changes through the native directory against
-	 * the disposable database. The unsaved actor tests a write that changes zero rows.
-	 */
+	// The unsaved actor exercises a database write that changes zero rows.
 	private static void checkPlayerDirectory()
 	{
 		final String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -274,12 +254,6 @@ public class PartyLifecycleTest extends StdTest
 		}
 	}
 
-	/**
-	 * Creates a player object that can be saved to the disposable database.
-	 *
-	 * @param name a unique fixture name
-	 * @return the player object, without a session
-	 */
 	private static MOB createFixturePlayer(final String name)
 	{
 		final MOB player = CMClass.getMOB("StdMOB");
@@ -291,14 +265,6 @@ public class PartyLifecycleTest extends StdTest
 		return player;
 	}
 
-	/**
-	 * Checks the parts of an entry that must survive a lifecycle change.
-	 *
-	 * @param current the entry after the change
-	 * @param original the entry before the change
-	 * @param sender the expected sender after the change
-	 * @param candidate the expected candidate after the change
-	 */
 	private static void checkSameEntry(final PartyPendingEntry current, final PartyPendingEntry original,
 			final String sender, final String candidate)
 	{
@@ -308,12 +274,6 @@ public class PartyLifecycleTest extends StdTest
 				"The original entry and deadline should survive with the right names.");
 	}
 
-	/**
-	 * Stops a case with its expected result.
-	 *
-	 * @param condition whether the expected state was reached
-	 * @param message the expected result
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

@@ -1649,12 +1649,7 @@ public class CMPlayers extends StdLibrary implements PlayerLibrary
 		return true;
 	}
 
-	/**
-	 * Restores directory and account membership after retirement is vetoed or fails.
-	 * Any session that already logged out stays closed.
-	 *
-	 * @param player the character whose saved record was kept
-	 */
+	// A session that already logged out stays closed.
 	private void restorePlayerAfterFailedDeletion(final MOB player)
 	{
 		addPlayer(player);

@@ -87,16 +87,12 @@ public final class HostTestRunner
 	/** Owns the temporary world objects and session used by one check. */
 	private static final class TestContext implements AutoCloseable
 	{
-		/** The area that holds the test room. */
 		private final Area area = CMClass.getAreaType("StdArea");
 
-		/** The character's starting room. */
 		private final Room room = CMClass.getLocale("StdRoom");
 
-		/** The temporary Archon passed to CoffeeMud's test API. */
 		private final MOB actor = CMClass.getMOB("StdMOB");
 
-		/** The session that captures the Archon's command output. */
 		private final RecordingSession session = new RecordingSession();
 
 		/**
@@ -105,7 +101,6 @@ public final class HostTestRunner
 		 */
 		TestContext()
 		{
-			// Give the character a room in a temporary area.
 			area.setName("CITestArea");
 			room.setRoomID("CITestArea#0");
 			room.setArea(area);
@@ -241,15 +236,7 @@ public final class HostTestRunner
 		}
 	}
 
-	/**
-	 * Runs the test between cleanup calls, as the in-game command does.
-	 * Keeps the original failure message if cleanup also fails.
-	 *
-	 * @param test registered test to run
-	 * @param actor character passed to the test
-	 * @param selector group name or ID passed to the test
-	 * @return a failure message, or {@code null} when the test and cleanup pass
-	 */
+	// Preserve the original test failure if cleanup also fails.
 	private static String runTestWithCleanup(final CMTest test, final MOB actor, final String selector)
 	{
 		String failure = null;
@@ -297,26 +284,13 @@ public final class HostTestRunner
 		return 0;
 	}
 
-	/**
-	 * Escapes quotes and other special characters in a report attribute.
-	 *
-	 * @param text name or failure message to write
-	 * @return text with XML attribute characters escaped
-	 */
 	private static String escapeXmlAttribute(final String text)
 	{
 		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 				.replace("\"", "&quot;").replace("'", "&apos;");
 	}
 
-	/**
-	 * Writes the report beside the runtime folder and prints a short summary.
-	 * Writing before shutdown preserves the results if the server takes too long to stop.
-	 *
-	 * @param results checks to include in the report
-	 * @throws IOException if the report cannot be opened
-	 * @throws IllegalStateException if a write to the report fails
-	 */
+	// Write before shutdown so the report survives a shutdown timeout.
 	private static void writeResults(final List<Result> results) throws IOException
 	{
 		int failures = 0;
@@ -347,14 +321,6 @@ public final class HostTestRunner
 		System.out.println("CI SUMMARY tests=" + results.size() + " failures=" + failures);
 	}
 
-	/**
-	 * Checks that the test character can use the real {@code TEST LIST} command
-	 * and see a test the runner found in the registry.
-	 *
-	 * @param context temporary character and recording session
-	 * @param expectedTest ID that should appear in the command output
-	 * @throws AssertionError if permissions or test discovery fail
-	 */
 	private static void commandSmoke(final TestContext context, final String expectedTest)
 	{
 		if(!CMClass.getCommand("Test").securityCheck(context.actor))
@@ -365,13 +331,6 @@ public final class HostTestRunner
 			throw new AssertionError("TEST LIST did not discover " + expectedTest);
 	}
 
-	/**
-	 * Waits for CoffeeMud to finish loading its libraries and open the listener.
-	 *
-	 * @param startupTimeoutSeconds maximum time to wait for startup in seconds
-	 * @throws InterruptedException if the runner is interrupted while waiting
-	 * @throws IllegalStateException if the host misses its startup deadline
-	 */
 	private static void waitForHost(final long startupTimeoutSeconds) throws InterruptedException
 	{
 		final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(startupTimeoutSeconds);
@@ -383,13 +342,7 @@ public final class HostTestRunner
 		}
 	}
 
-	/**
-	 * Runs the selected checks in the main host's thread group and exits the process.
-	 * This thread owns the result list. Test workers return their outcomes through
-	 * futures, so they never write to the list directly.
-	 *
-	 * @param args launcher arguments in the order documented by {@link #main(String[])}
-	 */
+	// The host thread owns the result list. Test workers report through futures.
 	private static void runInHost(final String[] args)
 	{
 		final List<Result> results = new ArrayList<Result>();

@@ -78,13 +78,6 @@ public class ExplorationContextTest extends StdTest
 		}
 	}
 
-	/**
-	 * Makes a room suitable for native movement and inspection.
-	 *
-	 * @param area the fixture area
-	 * @param name the room name
-	 * @return the room
-	 */
 	private static Room createRoom(final Area area, final String name)
 	{
 		final Room room = CMClass.getLocale("StdRoom");
@@ -94,24 +87,12 @@ public class ExplorationContextTest extends StdTest
 		return room;
 	}
 
-	/**
-	 * Sets up one direction of an exit so the return side can be tested separately.
-	 *
-	 * @param source the room containing the exit
-	 * @param direction the direction out
-	 * @param destination the room reached
-	 */
 	private static void connect(final Room source, final int direction, final Room destination)
 	{
 		source.setRawExit(direction,CMClass.getExit("Open"));
 		source.rawDoors()[direction] = destination;
 	}
 
-	/**
-	 * Checks the command and makes sure inspection and activity choice leave native visibility alone.
-	 *
-	 * @param player the character who enters the commands
-	 */
 	private static void checkChoices(final TestPlayer player)
 	{
 		final ExplorationContext initial = context(player);
@@ -142,15 +123,6 @@ public class ExplorationContextTest extends StdTest
 				"Activity and inspection commands should not apply stealth effects.");
 	}
 
-	/**
-	 * Moves two party members with different activities and checks the encounter handoff.
-	 *
-	 * @param alice the independent mover
-	 * @param bob the follower with Avoid Notice selected
-	 * @param guardroom the actual destination
-	 * @param completed the consumer's recorded travel
-	 * @return Bob's arrival for later snapshot checks
-	 */
 	private static Arrival checkPartyEntry(final TestPlayer alice, final TestPlayer bob, final Room guardroom,
 			final List<Completed> completed)
 	{
@@ -181,13 +153,6 @@ public class ExplorationContextTest extends StdTest
 		return follower;
 	}
 
-	/**
-	 * Checks combat restrictions, participant-only reset, and a fresh session.
-	 *
-	 * @param alice another party member, used to detect a roster-wide reset
-	 * @param bob the character whose activity gets reset
-	 * @param arrival the snapshot already handed to an encounter consumer
-	 */
 	private static void checkResets(final TestPlayer alice, final TestPlayer bob, final Arrival arrival)
 	{
 		bob.getMob().setVictim(alice.getMob());
@@ -222,15 +187,6 @@ public class ExplorationContextTest extends StdTest
 				"The new session should be able to select an activity again.");
 	}
 
-	/**
-	 * Distinguishes a system placement, a forced exit, and a one-way player exit.
-	 *
-	 * @param player the traveler
-	 * @param hall the start of both fixture exits
-	 * @param guardroom the destination with a return connection
-	 * @param alcove the one-way destination
-	 * @param completed the consumer's recorded travel
-	 */
 	private static void checkOtherPlacement(final TestPlayer player, final Room hall, final Room guardroom,
 			final Room alcove, final List<Completed> completed)
 	{
@@ -252,23 +208,11 @@ public class ExplorationContextTest extends StdTest
 				&& approach.activity == Activity.NORMAL,"A one-way arrival should report an unknown entry and the current activity.");
 	}
 
-	/**
-	 * Reads the current context from the same library the command uses.
-	 *
-	 * @param player the character under test
-	 * @return the current context snapshot
-	 */
 	private static ExplorationContext context(final TestPlayer player)
 	{
 		return CMLib.parties().explorationContext(player.getMob());
 	}
 
-	/**
-	 * Fails the fixture with the expected behavior when a check fails.
-	 *
-	 * @param condition whether the expected result occurred
-	 * @param message the expected result
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

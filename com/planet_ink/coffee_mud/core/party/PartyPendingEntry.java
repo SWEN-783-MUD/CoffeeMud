@@ -18,19 +18,14 @@ public final class PartyPendingEntry
 		REQUEST
 	}
 
-	/** The ID used to act on this entry. */
 	private final long id;
 
-	/** The party the candidate would join. */
 	private final long partyId;
 
-	/** The kind of entry originally opened. */
 	private final Type type;
 
-	/** The character who sent the invitation or request. */
 	private final String senderKey;
 
-	/** The character who would join if this entry succeeds. */
 	private final String candidateKey;
 
 	/** The first instant at which the entry is expired. */

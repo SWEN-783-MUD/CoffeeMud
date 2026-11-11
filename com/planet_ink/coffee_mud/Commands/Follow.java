@@ -135,16 +135,7 @@ public class Follow extends StdCommand
 		return true;
 	}
 
-	/**
-	 * Checks party and native room rules without removing an existing link.
-	 * The native message applies the link and rechecks party state at that point.
-	 *
-	 * @param follower the player starting to follow
-	 * @param target the party member they want to follow
-	 * @param room the room handling this attempt
-	 * @param quiet whether to suppress follow messages
-	 * @return whether the native link changed to the target
-	 */
+	// Keep the current link until the native message rechecks party state and applies the replacement.
 	private boolean followPartyMember(final MOB follower, final MOB target, final Room room, final boolean quiet)
 	{
 		final FollowResult result = CMLib.parties().checkPlayerFollow(follower,target);

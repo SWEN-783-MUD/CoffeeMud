@@ -164,13 +164,6 @@ public class PartyEncounterTest extends StdTest
 		}
 	}
 
-	/**
-	 * Checks that an entry rule still needs room permission and that manual-only rooms wait.
-	 *
-	 * @param player the character entering through the west side
-	 * @param room the guardroom applying the permission check
-	 * @param guard the NPC returned by the entry rule
-	 */
 	private static void checkRoomPermission(final TestPlayer player, final EntryRoom room, final MOB guard)
 	{
 		final EncounterManager manager = room.getEncounterManager();
@@ -188,12 +181,6 @@ public class PartyEncounterTest extends StdTest
 		check(manager.getEncounter() == null,"An enabled room without an entry rule should wait for manual initiation.");
 	}
 
-	/**
-	 * Runs a competing action while the setup callback is still open.
-	 *
-	 * @param worker the separate test thread
-	 * @param action the action that must finish before setup can continue
-	 */
 	private static void onWorker(final ExecutorService worker, final Runnable action)
 	{
 		try
@@ -206,16 +193,6 @@ public class PartyEncounterTest extends StdTest
 		}
 	}
 
-	/**
-	 * Verifies the participants and their fixed setup information.
-	 *
-	 * @param manager the room's actual encounter manager
-	 * @param alice the first arrival
-	 * @param bob the second arrival
-	 * @param guard the encounter NPC
-	 * @param activity Bob's choice at entry
-	 * @return the pending encounter
-	 */
 	private static GeneralEncounter checkSetup(final EncounterManager manager, final TestPlayer alice,
 			final TestPlayer bob, final MOB guard, final Activity activity)
 	{
@@ -233,16 +210,6 @@ public class PartyEncounterTest extends StdTest
 		return encounter;
 	}
 
-	/**
-	 * Exercises commands and notification lookup across pending and active phases.
-	 *
-	 * @param manager the room's encounter manager
-	 * @param encounter the first encounter
-	 * @param alice the enrolled leader
-	 * @param bob the enrolled follower
-	 * @param carol the player in the hall
-	 * @param carolInvite the entry Carol can accept during the encounter
-	 */
 	private static void checkRestrictions(final EncounterManager manager, final GeneralEncounter encounter,
 			final TestPlayer alice, final TestPlayer bob, final TestPlayer carol, final String carolInvite)
 	{
@@ -271,13 +238,6 @@ public class PartyEncounterTest extends StdTest
 		check(bob.command("PARTY","CREATE").contains("Wait until combat ends"),"Leaving should not lift combat restrictions.");
 	}
 
-	/**
-	 * Adds a room to the fixture's encounter area.
-	 *
-	 * @param room the room being prepared
-	 * @param area the opt-in area
-	 * @param name the room's local name
-	 */
 	private static void setUpRoom(final Room room, final Area area, final String name)
 	{
 		room.setArea(area);
@@ -285,25 +245,11 @@ public class PartyEncounterTest extends StdTest
 		room.setDisplayText(name);
 	}
 
-	/**
-	 * Opens a real invitation and returns its ID.
-	 *
-	 * @param leader the inviting player
-	 * @param member the invited player
-	 * @return the invitation ID from the command output
-	 */
 	private static String invite(final TestPlayer leader, final TestPlayer member)
 	{
 		return PartyInviteCommandTest.sentId(leader.command("PARTY","INVITE",member.getMob().Name()));
 	}
 
-	/**
-	 * Accepts an invitation and checks that the leader and member now share a party.
-	 *
-	 * @param leader the party leader
-	 * @param member the player joining
-	 * @param id the invitation ID
-	 */
 	private static void join(final TestPlayer leader, final TestPlayer member, final String id)
 	{
 		check(member.command("PARTY","ACCEPT",id).contains("You joined the party")
@@ -325,17 +271,12 @@ public class PartyEncounterTest extends StdTest
 			}
 		};
 
-		/** The NPC attempting the attack. */
 		private MOB guard;
 		/** The worker that acts while the entry callback is paused. */
 		private ExecutorService combatThread;
-		/** Whether the first native entry has already checked the guard. */
 		private boolean attackChecked;
-		/** An optional follower whose entry is refused by the room. */
 		private MOB blocked;
-		/** Whether to refuse the opener's attack permission check. */
 		private boolean denyOpening;
-		/** Whether the fixture observed that permission check. */
 		private boolean deniedOpening;
 
 		/** {@inheritDoc} */
@@ -383,12 +324,6 @@ public class PartyEncounterTest extends StdTest
 		}
 	}
 
-	/**
-	 * Stops the fixture with the behavior that failed.
-	 *
-	 * @param condition whether the expected behavior occurred
-	 * @param message the expected behavior
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)

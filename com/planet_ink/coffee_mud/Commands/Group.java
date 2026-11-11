@@ -164,13 +164,6 @@ public class Group extends StdCommand
 		return shortCode;
 	}
 
-	/**
-	 * Finds party links that the legacy group transfer would remove or create.
-	 *
-	 * @param newLeader the new native follow target
-	 * @param movers the characters the legacy command would move to that target
-	 * @return whether the transfer would rewire a player-to-player link
-	 */
 	private boolean rewiresPlayerLinks(final MOB newLeader, final List<MOB> movers)
 	{
 		for(final MOB member : movers)

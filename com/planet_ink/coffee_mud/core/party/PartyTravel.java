@@ -12,7 +12,6 @@ import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 /** Snapshots used to run a party's exit move and report where it ended. */
 public final class PartyTravel
 {
-	/** Holds the travel snapshots. */
 	private PartyTravel()
 	{
 	}
@@ -20,15 +19,12 @@ public final class PartyTravel
 	/** One character and their direct party followers at the start of a move. */
 	public static final class Step
 	{
-		/** The character whose step this is. */
 		public final MOB player;
 		/** The character they were following, or null for independent travel. */
 		public final MOB parent;
-		/** The room the batch is leaving. */
 		public final Room source;
 		/** The room the character actually occupied when the batch started. */
 		public final Room startingRoom;
-		/** The character's session at the start of the batch. */
 		public final Session session;
 		/** The roster that supplied this branch, or zero for a solo traveler. */
 		public final long partyId;
@@ -75,15 +71,12 @@ public final class PartyTravel
 	/** A player who actually crossed the exit during the batch. */
 	public static final class Arrival
 	{
-		/** The live character at the time of arrival. */
 		public final MOB player;
-		/** The canonical name at arrival, captured for reporting. */
 		public final String characterKey;
 		/** The direction back through the actual destination connection, or -1 if unknown. */
 		public final int entrySide;
 		/** The player's activity and approach at the time they entered the room. */
 		public final ExplorationContext exploration;
-		/** The session that actually traveled. */
 		public final Session session;
 		/** The player's position revision after placement. */
 		public final long positionRevision;
@@ -123,11 +116,8 @@ public final class PartyTravel
 	/** One follower who did not take their planned step. */
 	public static final class Failure
 	{
-		/** The follower who did not arrive. */
 		public final MOB player;
-		/** The canonical name when the outcome was recorded. */
 		public final String characterKey;
-		/** Why the follower did not move through the batch. */
 		public final FailureReason reason;
 
 		/**
@@ -150,9 +140,7 @@ public final class PartyTravel
 	{
 		/** Identifies this traversal for a consumer that needs to deduplicate delivery. */
 		public final UUID id;
-		/** The room where the independent move began. */
 		public final Room source;
-		/** The actual room the initiator entered. */
 		public final Room destination;
 		/** The direction the initiator entered at the command line. */
 		public final int direction;

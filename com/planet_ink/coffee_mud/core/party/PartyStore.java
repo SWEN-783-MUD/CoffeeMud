@@ -147,10 +147,8 @@ public interface PartyStore
 	/** An immutable entry and the party leader when the store read or closed it. */
 	final class PendingView
 	{
-		/** The invitation or request. */
 		private final PartyPendingEntry entry;
 
-		/** The character leading its party at the time of the operation. */
 		private final String leaderKey;
 
 		/**
@@ -217,10 +215,8 @@ public interface PartyStore
 	/** Pairs the opening outcome with the entry needed for player feedback. */
 	final class PendingResult
 	{
-		/** The outcome of the operation. */
 		private final PendingStatus status;
 
-		/** The entry created or found by the operation, when available. */
 		private final PartyPendingEntry entry;
 
 		/**
@@ -259,10 +255,8 @@ public interface PartyStore
 	/** Reports an admission attempt and identifies the member added on success. */
 	final class JoinResult
 	{
-		/** The outcome of the operation. */
 		private final JoinStatus status;
 
-		/** The character added to the party, when the join succeeds. */
 		private final String joinedCandidateKey;
 
 		/**
@@ -304,13 +298,10 @@ public interface PartyStore
 	 */
 	final class PartySnapshot
 	{
-		/** The unique ID of the party. */
 		private final long id;
 
-		/** The character key of the party leader. */
 		private final String leader;
 
-		/** An unmodifiable list of member keys in join order. */
 		private final List<String> members;
 
 		/**

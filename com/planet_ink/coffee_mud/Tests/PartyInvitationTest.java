@@ -93,11 +93,6 @@ public class PartyInvitationTest extends StdTest
 		System.out.println("PASS: Party invitation fixture.");
 	}
 
-	/**
-	 * Runs each invitation, leave, and race case with its own starting state.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void runCases() throws Exception
 	{
 		invitationRequiresLeaderAndRecipient();
@@ -110,7 +105,6 @@ public class PartyInvitationTest extends StdTest
 		competingPartiesAdmitCharacterOnce();
 	}
 
-	/** Checks who can invite, view, and accept, including a repeat invitation. */
 	private static void invitationRequiresLeaderAndRecipient()
 	{
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
@@ -148,7 +142,6 @@ public class PartyInvitationTest extends StdTest
 				"An existing member does not need another invitation.");
 	}
 
-	/** Checks the configured deadline just before, exactly at, and just after expiry. */
 	private static void invitationExpiresAtItsDeadline()
 	{
 		final AtomicReference<Instant> now = new AtomicReference<Instant>(Instant.EPOCH);
@@ -179,7 +172,6 @@ public class PartyInvitationTest extends StdTest
 		check(store.pendingEntries("Carol").isEmpty(), "Pending should hide an invite at its deadline.");
 	}
 
-	/** Checks the default size limit and a retry after a member leaves. */
 	private static void fullPartyKeepsInviteOpen()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -206,7 +198,6 @@ public class PartyInvitationTest extends StdTest
 				"Bob can use the same invite once a seat opens.");
 	}
 
-	/** Checks join order, succession, and party-owned invites when a leader leaves. */
 	private static void leaderDepartureKeepsPartyAndInvites()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -238,7 +229,6 @@ public class PartyInvitationTest extends StdTest
 				"A non-leader leaving should keep the current leader.");
 	}
 
-	/** Checks that deleting and recreating a party cannot revive its invites. */
 	private static void removedPartyRetiresInvites()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -256,7 +246,6 @@ public class PartyInvitationTest extends StdTest
 		check(store.acceptInvitation("Bob", newInvite.getId()).getStatus() == JoinStatus.JOINED, "The new invite should work.");
 	}
 
-	/** Checks that membership cancels other invites even after the member later leaves. */
 	private static void joiningOrCreatingClearsOtherInvites()
 	{
 		final PartyStore store = new InMemoryPartyStore();
@@ -294,11 +283,6 @@ public class PartyInvitationTest extends StdTest
 		return store.pendingEntries(characterKey).stream().map(PendingView::getEntry).collect(Collectors.toList());
 	}
 
-	/**
-	 * Checks that only one recipient can take the last seat.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void competingAcceptancesRespectCapacity() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 2);
@@ -314,11 +298,6 @@ public class PartyInvitationTest extends StdTest
 				"The member lookup must include only the winner.");
 	}
 
-	/**
-	 * Checks that one character cannot accept invitations to two parties together.
-	 *
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static void competingPartiesAdmitCharacterOnce() throws Exception
 	{
 		final PartyStore store = new InMemoryPartyStore(() -> Instant.EPOCH, Duration.ofMinutes(2), 6);
@@ -336,14 +315,6 @@ public class PartyInvitationTest extends StdTest
 		check(store.pendingEntries("Bob").isEmpty(), "The successful join should retire both invites.");
 	}
 
-	/**
-	 * Sends an invitation that the case expects to succeed.
-	 *
-	 * @param store the store used by the case
-	 * @param leader the sender
-	 * @param recipient the invited character
-	 * @return the invitation created by the store
-	 */
 	private static PartyPendingEntry sendInvite(final PartyStore store, final String leader, final String recipient)
 	{
 		final PendingResult result = store.invite(leader, recipient);
@@ -352,15 +323,6 @@ public class PartyInvitationTest extends StdTest
 		return result.getEntry();
 	}
 
-	/**
-	 * Releases two acceptance attempts together and waits for both outcomes.
-	 *
-	 * @param store the store shared by both workers
-	 * @param first the first invitation to accept
-	 * @param second the second invitation to accept
-	 * @return outcomes in the same order as the invitations
-	 * @throws Exception if a worker fails, times out, or is interrupted
-	 */
 	private static List<JoinStatus> acceptTogether(final PartyStore store, final PartyPendingEntry first,
 			final PartyPendingEntry second) throws Exception
 	{
@@ -401,12 +363,6 @@ public class PartyInvitationTest extends StdTest
 		}
 	}
 
-	/**
-	 * Fails a case with a message that says which rule broke.
-	 *
-	 * @param condition whether the expected state was reached
-	 * @param message what the case expected
-	 */
 	private static void check(final boolean condition, final String message)
 	{
 		if(!condition)
