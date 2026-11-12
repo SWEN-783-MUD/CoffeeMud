@@ -1,5 +1,6 @@
 package com.planet_ink.coffee_mud.Commands;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -7,6 +8,7 @@ import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.CMParms;
+import com.planet_ink.coffee_mud.core.CMStrings;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 
 /** Reads PARTY commands and sends the requested action to the party library. */
@@ -60,12 +62,7 @@ public class Party extends StdCommand
 
 		if(commands.size() == 1)
 		{
-			final PartySnapshot party = parties.findParty(mob);
-			if(party == null)
-				mob.tell(L("You are not in a party. Use PARTY CREATE to start one."));
-			else
-				mob.tell(L("Your party leader is @x1.\n\rMembers are @x2.",
-					party.getLeader(), CMParms.toListString(party.getMembers())));
+			showParty(mob, parties.findParty(mob));
 			return false;
 		}
 
@@ -77,12 +74,15 @@ public class Party extends StdCommand
 		}
 		if(commands.size() != 2)
 		{
-			showUsage(mob);
+			showActionUsage(mob, action);
 			return false;
 		}
 
 		switch(action)
 		{
+		case "HELP":
+			showUsage(mob);
+			break;
 		case "CREATE":
 			createParty(mob, parties);
 			break;
@@ -96,7 +96,7 @@ public class Party extends StdCommand
 			parties.showPendingEntries(mob);
 			break;
 		default:
-			showUsage(mob);
+			showActionUsage(mob, action);
 			break;
 		}
 		return false;
@@ -141,7 +141,7 @@ public class Party extends StdCommand
 			}
 			break;
 		default:
-			showUsage(mob);
+			showActionUsage(mob, action);
 			break;
 		}
 	}
@@ -184,9 +184,88 @@ public class Party extends StdCommand
 
 	private void showUsage(final MOB mob)
 	{
-		mob.tell(L("Use PARTY, PARTY CREATE, PARTY LEAVE, PARTY LEADER <name>, PARTY INVITE <name>, PARTY REQUEST <leader>, "
-				+ "PARTY PENDING, PARTY ACCEPT <id>, PARTY APPROVE <id>, PARTY DECLINE <id>, or PARTY CANCEL <id>. "
-				+ "Use HELP PARTY for details."));
+		final StringBuilder help = new StringBuilder(L("^HParty commands^N\n\r"));
+		appendHelpLine(help, "PARTY", "View your party");
+		appendHelpLine(help, "PARTY CREATE", "Start a party");
+		appendHelpLine(help, "PARTY LEAVE", "Leave your party");
+		appendHelpLine(help, "PARTY PENDING", "View invitations and requests");
+
+		help.append(L("\n\r^HJoining a party^N\n\r"));
+		appendHelpLine(help, "PARTY REQUEST <leader>", "Ask to join a party");
+		appendHelpLine(help, "PARTY ACCEPT <id>", "Accept an invitation");
+
+		help.append(L("\n\r^HLeader commands^N\n\r"));
+		appendHelpLine(help, "PARTY INVITE <name>", "Invite a player");
+		appendHelpLine(help, "PARTY APPROVE <id>", "Approve a join request");
+		appendHelpLine(help, "PARTY LEADER <name>", "Pass leadership to a member");
+
+		help.append(L("\n\r^HInvitations and requests^N\n\r"));
+		appendHelpLine(help, "PARTY DECLINE <id>", "Decline an incoming invitation or request");
+		appendHelpLine(help, "PARTY CANCEL <id>", "Withdraw a request or party invitation");
+		help.append(L("\n\rUse HELP PARTY for details, or HELP FOLLOW for travelling together."));
+		mob.tell(help.toString());
+	}
+
+	private void appendHelpLine(final StringBuilder help, final String syntax, final String description)
+	{
+		help.append("  ").append(CMStrings.padRight(L(syntax), 27)).append(L(description)).append("\n\r");
+	}
+
+	private void showParty(final MOB mob, final PartySnapshot party)
+	{
+		if(party == null)
+		{
+			mob.tell(L("You are not in a party.\n\r"
+					+ "Use PARTY CREATE to start one, or PARTY REQUEST <leader> to ask to join.\n\r"
+					+ "Use PARTY PENDING to check invitations, or PARTY HELP for commands."));
+			return;
+		}
+
+		final List<String> members = new ArrayList<String>();
+		for(final String member : party.getMembers())
+			members.add(member.equalsIgnoreCase(mob.Name()) ? L("@x1 (you)", member) : member);
+
+		final String leader = party.getLeader().equalsIgnoreCase(mob.Name())
+				? L("You are the party leader.") : L("Party leader: @x1", party.getLeader());
+		mob.tell(L("^HYour party^N\n\r@x1\n\r\n\rMembers (@x2): @x3",
+				leader, Integer.toString(members.size()), CMParms.toListString(members)));
+	}
+
+	private void showActionUsage(final MOB mob, final String action)
+	{
+		final String argument;
+		final String example;
+		switch(action)
+		{
+		case "CREATE":
+		case "LEAVE":
+		case "PENDING":
+		case "HELP":
+			argument = "";
+			example = "";
+			break;
+		case "INVITE":
+		case "LEADER":
+			argument = " <name>";
+			example = " Bob";
+			break;
+		case "REQUEST":
+			argument = " <leader>";
+			example = " Alice";
+			break;
+		case "ACCEPT":
+		case "APPROVE":
+		case "DECLINE":
+		case "CANCEL":
+			argument = " <id>";
+			example = " 12";
+			break;
+		default:
+			mob.tell(L("Unknown party command '@x1'.", action));
+			showUsage(mob);
+			return;
+		}
+		mob.tell(L("Usage: PARTY @x1@x2\n\rExample: PARTY @x1@x3", action, argument, example));
 	}
 
 	/**

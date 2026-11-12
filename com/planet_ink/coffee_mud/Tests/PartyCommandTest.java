@@ -60,6 +60,8 @@ public class PartyCommandTest extends StdTest
 	{
 		noPartyShowsCreationGuidance();
 		createAndInspectParty();
+		memberViewIdentifiesTheReader();
+		helpAndArgumentErrorsAreUseful();
 		duplicateCreationPreservesSharedMembership();
 		differentPlayersCreateSeparateParties();
 		replacementPlayerFindsExistingParty();
@@ -78,8 +80,9 @@ public class PartyCommandTest extends StdTest
 		execute(command, alice, "PARTY");
 
 		check(service.findParty(alice.mob) == null, "Inspection should preserve empty membership.");
-		check(alice.messages.contains(command.L("You are not in a party. Use PARTY CREATE to start one.")),
-			"A player without a party should receive creation guidance.");
+		final String output = String.join("\n", alice.messages);
+		check(output.contains("PARTY CREATE") && output.contains("PARTY REQUEST <leader>")
+				&& output.contains("PARTY PENDING"), "A player without a party should see the ways to get started.");
 	}
 
 	private static void createAndInspectParty()
@@ -98,8 +101,51 @@ public class PartyCommandTest extends StdTest
 		alice.messages.clear();
 		execute(command, alice, "PARTY");
 
-		check(alice.messages.contains(command.L("Your party leader is @x1.\n\rMembers are @x2.", "Alice", "Alice")),
-			"The roster should show Alice as leader and member.");
+		final String output = CMStrings.removeColors(String.join("\n", alice.messages));
+		check(output.contains("You are the party leader.") && output.contains("Members (1): Alice (you)"),
+			"The roster should identify the reader as leader and show the member count without needing color.");
+	}
+
+	private static void memberViewIdentifiesTheReader()
+	{
+		final CMParties service = new CMParties()
+		{
+			@Override
+			public PartySnapshot findParty(final MOB character)
+			{
+				return new PartySnapshot(1, "Alice", Arrays.asList("Alice", "Bob"));
+			}
+		};
+		final Actor bob = new Actor("Bob", true);
+		execute(partyCommand(service), bob, "PARTY");
+
+		final String output = CMStrings.removeColors(String.join("\n", bob.messages));
+		check(output.contains("Party leader: Alice") && output.contains("Members (2): Alice, Bob (you)")
+				&& !output.contains("You are the party leader"), "A member's roster should name the actual leader.");
+	}
+
+	private static void helpAndArgumentErrorsAreUseful()
+	{
+		final CMParties service = new CMParties();
+		final Party command = partyCommand(service);
+		final Actor alice = new Actor("Alice", true);
+		execute(command, alice, "PARTY", "HELP");
+		final String help = CMStrings.removeColors(String.join("\n", alice.messages));
+		check(help.contains("Joining a party\n\r") && help.contains("Leader commands\n\r")
+				&& help.contains("PARTY APPROVE <id>") && help.contains("HELP FOLLOW"),
+				"Plain text help should group commands and point to related help.");
+		check(service.findParty(alice.mob) == null, "Reading help must not create membership.");
+
+		alice.messages.clear();
+		execute(command, alice, "PARTY", "INVITE");
+		final String missingName = String.join("\n", alice.messages);
+		check(missingName.contains("Usage: PARTY INVITE <name>") && missingName.contains("Example: PARTY INVITE Bob")
+				&& !missingName.contains("Leader commands"), "A missing name should show only that action's syntax.");
+
+		alice.messages.clear();
+		execute(command, alice, "PARTY", "UNKNOWN");
+		check(String.join("\n", alice.messages).contains("Unknown party command 'UNKNOWN'"),
+				"An unknown action should explain why the command menu is being shown.");
 	}
 
 	private static void duplicateCreationPreservesSharedMembership()

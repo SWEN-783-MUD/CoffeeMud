@@ -256,12 +256,12 @@ public class PartyInviteCommandTest extends StdTest
 		check(bob.command("PARTY", "APPROVE", id).contains(carolName + " joined your party"),
 				"The current leader should be able to approve after combat.");
 		check(carol.output().contains(bobName + " approved your request"), "Carol should be notified of approval.");
-		check(carol.command("PARTY").contains("Your party leader is " + bobName),
+		check(carol.command("PARTY").contains("Party leader: " + bobName),
 				"Carol should see the new roster after approval.");
 		check(carol.mob.location() == carolRoom && carol.mob.amFollowing() == null,
 				"Approval should neither move Carol nor start following.");
 		check(bob.command("PARTY", "LEAVE").contains("You left the party"), "Bob should be able to leave.");
-		check(carol.command("PARTY").contains("Your party leader is " + aliceName),
+		check(carol.command("PARTY").contains("Party leader: " + aliceName),
 				"Alice should take over again because she was first to join.");
 	}
 
