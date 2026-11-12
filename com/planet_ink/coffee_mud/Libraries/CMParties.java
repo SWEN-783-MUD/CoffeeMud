@@ -863,7 +863,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			final Duration remaining = Duration.between(now, entry.getExpiresAt());
 			final long roundedSeconds = remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1);
 			final String seconds = Long.toString(Math.max(0, roundedSeconds));
-			output.append(L("Expires in @x1 seconds.\n\r", seconds));
+			output.append(roundedSeconds == 1 ? L("Expires in 1 second.\n\r") : L("Expires in @x1 seconds.\n\r", seconds));
 
 			if(entry.getType() == Type.INVITATION)
 			{
