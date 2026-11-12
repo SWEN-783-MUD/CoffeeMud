@@ -23,6 +23,7 @@ import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMLib;
 import com.planet_ink.coffee_mud.core.CMProps;
 import com.planet_ink.coffee_mud.core.CMStrings;
+import com.planet_ink.coffee_mud.core.Log;
 import com.planet_ink.coffee_mud.core.collections.Pair;
 import com.planet_ink.coffee_mud.core.party.ExplorationContext;
 import com.planet_ink.coffee_mud.core.party.ExplorationContext.Activity;
@@ -30,6 +31,7 @@ import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry.Type;
 import com.planet_ink.coffee_mud.core.party.PartyStore;
+import com.planet_ink.coffee_mud.core.party.PartyStore.IdLimitException;
 import com.planet_ink.coffee_mud.core.party.PartyStore.JoinResult;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PartySnapshot;
 import com.planet_ink.coffee_mud.core.party.PartyStore.PendingResult;
@@ -605,7 +607,15 @@ public class CMParties extends StdLibrary implements PartyLibrary
 				return CreateResult.NOT_PLAYER;
 			if(isCombatRestricted(character))
 				return CreateResult.IN_COMBAT;
-			return store.create(characterKey(character)) == null ? CreateResult.ALREADY_MEMBER : CreateResult.CREATED;
+			try
+			{
+				return store.create(characterKey(character)) == null ? CreateResult.ALREADY_MEMBER : CreateResult.CREATED;
+			}
+			catch(final IdLimitException error)
+			{
+				Log.errOut(ID(), error);
+				return CreateResult.ID_LIMIT;
+			}
 		}
 	}
 
@@ -687,7 +697,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			else
 			{
 				recipient = findOnlinePlayer(recipientName);
-				result = recipient == null ? null : store.invite(senderKey, characterKey(recipient));
+				result = recipient == null ? null : openPending(() -> store.invite(senderKey, characterKey(recipient)));
 			}
 		}
 
@@ -724,6 +734,9 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		case ALREADY_MEMBER:
 			sender.tell(L("@x1 already belongs to a party.", recipient.Name()));
 			break;
+		case ID_LIMIT:
+			sender.tell(L("An invitation cannot be created right now. Please contact an administrator."));
+			break;
 		}
 	}
 
@@ -740,7 +753,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 
 			// Keep the online lookup and entry creation on the same names.
 			leader = findOnlinePlayer(leaderName);
-			result = leader == null ? null : store.requestJoin(characterKey(candidate), characterKey(leader));
+			result = leader == null ? null : openPending(() -> store.requestJoin(characterKey(candidate), characterKey(leader)));
 		}
 		if(result == null)
 		{
@@ -785,6 +798,22 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		case ALREADY_MEMBER:
 			candidate.tell(L("You already belong to a party. Use PARTY LEAVE before joining another."));
 			break;
+		case ID_LIMIT:
+			candidate.tell(L("A join request cannot be created right now. Please contact an administrator."));
+			break;
+		}
+	}
+
+	private PendingResult openPending(final Supplier<PendingResult> operation)
+	{
+		try
+		{
+			return operation.get();
+		}
+		catch(final IdLimitException error)
+		{
+			Log.errOut(ID(), error);
+			return new PendingResult(PendingStatus.ID_LIMIT, null);
 		}
 	}
 

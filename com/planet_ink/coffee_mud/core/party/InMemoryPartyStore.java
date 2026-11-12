@@ -88,7 +88,8 @@ public final class InMemoryPartyStore implements PartyStore
 			return null;
 
 		// Store the roster once and link the creator to it by ID.
-		final Long partyId = Long.valueOf(nextPartyId++);
+		final Long partyId = Long.valueOf(nextPartyId);
+		nextPartyId = incrementId(nextPartyId);
 		final PartySnapshot party = new PartySnapshot(partyId.longValue(), characterKey,
 				Collections.singletonList(characterKey));
 		partiesById.put(partyId, party);
@@ -268,10 +269,19 @@ public final class InMemoryPartyStore implements PartyStore
 		}
 
 		final String senderKey = type == Type.INVITATION ? leaderKey : candidateKey;
-		final PartyPendingEntry entry = new PartyPendingEntry(nextEntryId++, party.getId(), type,
+		final long followingId = incrementId(nextEntryId);
+		final PartyPendingEntry entry = new PartyPendingEntry(nextEntryId, party.getId(), type,
 				senderKey, candidateKey, now.plus(pendingLifetime));
+		nextEntryId = followingId;
 		entriesById.put(Long.valueOf(entry.getId()), entry);
 		return new PendingResult(PendingStatus.CREATED, entry);
+	}
+
+	private long incrementId(final long current)
+	{
+		if((current < 1) || (current == Long.MAX_VALUE))
+			throw new IdLimitException();
+		return current + 1;
 	}
 
 	/**

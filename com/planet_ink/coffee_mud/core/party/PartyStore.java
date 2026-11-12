@@ -15,6 +15,7 @@ public interface PartyStore
 	 *
 	 * @param characterKey the character creating the party
 	 * @return the new roster, or {@code null} if the character already has a party
+	 * @throws IdLimitException if the store cannot allocate another positive ID
 	 */
 	PartySnapshot create(String characterKey);
 
@@ -82,6 +83,7 @@ public interface PartyStore
 	 * @param leaderKey the character sending the invitation
 	 * @param recipientKey the character being invited
 	 * @return the outcome and any new or existing entry
+	 * @throws IdLimitException if a new entry needs an ID and the counter is exhausted
 	 */
 	PendingResult invite(String leaderKey, String recipientKey);
 
@@ -92,6 +94,7 @@ public interface PartyStore
 	 * @param candidateKey the character who wants to join
 	 * @param leaderKey the named party leader
 	 * @return the outcome and any new or existing entry
+	 * @throws IdLimitException if a new entry needs an ID and the counter is exhausted
 	 */
 	PendingResult requestJoin(String candidateKey, String leaderKey);
 
@@ -103,6 +106,18 @@ public interface PartyStore
 	 * @return an immutable list, which may be empty
 	 */
 	List<PendingView> pendingEntries(String characterKey);
+
+	/** Signals that allocating another ID would wrap the store's positive counter. */
+	final class IdLimitException extends IllegalStateException
+	{
+		private static final long serialVersionUID = 1L;
+
+		/** Creates an allocation failure without changing existing party state. */
+		public IdLimitException()
+		{
+			super("Party store ID limit reached.");
+		}
+	}
 
 	/**
 	 * Checks the invitation and adds its recipient to the party in one operation.
@@ -194,7 +209,9 @@ public interface PartyStore
 		/** The named leader does not currently lead a party. */
 		NOT_LEADER,
 		/** The candidate already belongs to a party. */
-		ALREADY_MEMBER
+		ALREADY_MEMBER,
+		/** The library could not allocate a new invitation or request ID. */
+		ID_LIMIT
 	}
 
 	/** The outcome of an acceptance or approval. */

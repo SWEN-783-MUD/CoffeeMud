@@ -162,6 +162,9 @@ public class Party extends StdCommand
 		case NOT_PLAYER:
 			mob.tell(L("Only player characters can use parties."));
 			break;
+		case ID_LIMIT:
+			mob.tell(L("A party cannot be created right now. Please contact an administrator."));
+			break;
 		}
 	}
 

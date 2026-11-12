@@ -27,7 +27,9 @@ public interface PartyLibrary extends CMLibrary
 		/** The actor is not a player character. */
 		NOT_PLAYER,
 		/** The actor must wait for combat to end. */
-		IN_COMBAT
+		IN_COMBAT,
+		/** The store cannot allocate another party ID. */
+		ID_LIMIT
 	}
 
 	/**
