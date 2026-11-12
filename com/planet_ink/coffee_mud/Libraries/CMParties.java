@@ -656,7 +656,7 @@ public class CMParties extends StdLibrary implements PartyLibrary
 		case TRANSFERRED:
 			leader.tell(L("You passed party leadership to @x1.", memberKey));
 			if(newLeader != null)
-				newLeader.tell(L("@x1 passed party leadership to you. Use PARTY PENDING to see pending entries.",
+				newLeader.tell(L("@x1 passed party leadership to you. Use PARTY PENDING to see invitations and requests.",
 						leader.Name()));
 			break;
 		case NOT_LEADER:
@@ -714,7 +714,8 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			// Notify the recipient after the store commits the invite.
 			final String id = Long.toString(result.getEntry().getId());
 			sender.tell(L("You invited @x1 to your party. Invitation ID is @x2.", recipient.Name(), id));
-			recipient.tell(L("@x1 invited you to their party. Use PARTY ACCEPT @x2 or PARTY PENDING.",
+			recipient.tell(L("^HParty invitation^N\n\r@x1 invited you to their party.\n\r"
+					+ "  PARTY ACCEPT @x2\n\r  PARTY DECLINE @x2\n\rUse PARTY PENDING for details and name shortcuts.",
 					sender.Name(), id));
 			break;
 		}
@@ -776,7 +777,8 @@ public class CMParties extends StdLibrary implements PartyLibrary
 						&& key.equals(current.getLeader()));
 			});
 			if(Boolean.TRUE.equals(stillLeads))
-				leader.tell(L("@x1 asked to join your party. Use PARTY APPROVE @x2 or PARTY PENDING.",
+				leader.tell(L("^HParty join request^N\n\r@x1 asked to join your party.\n\r"
+						+ "  PARTY APPROVE @x1\n\r  PARTY APPROVE @x2\n\r  PARTY DECLINE @x2",
 						candidate.Name(), id));
 			break;
 		}
@@ -837,38 +839,78 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			return;
 		}
 
-		// Round up so a live entry with less than a second left still shows time.
+		final StringBuilder output = new StringBuilder(L("^HParty invitations and requests^N\n\r"));
 		for(final PendingView view : pending)
 		{
 			final PartyPendingEntry entry = view.getEntry();
+			final String id = Long.toString(entry.getId());
+			final boolean candidate = key.equals(entry.getCandidateKey());
+			output.append("\n\r");
+			if(entry.getType() == Type.INVITATION)
+			{
+				output.append(candidate ? L("^HInvitation #@x1 from @x2^N\n\r", id, entry.getSenderKey())
+						: L("^HInvitation #@x1 to @x2^N\n\r", id, entry.getCandidateKey()));
+				if(candidate && !entry.getSenderKey().equals(view.getLeaderKey()))
+					output.append(L("Current party leader: @x1\n\r", view.getLeaderKey()));
+			}
+			else
+			{
+				output.append(candidate ? L("^HRequest #@x1^N\n\rYou asked to join @x2's party.\n\r", id, view.getLeaderKey())
+						: L("^HRequest #@x1 from @x2^N\n\r", id, entry.getCandidateKey()));
+			}
+
+			// Round up so a live entry with less than a second left still shows time.
 			final Duration remaining = Duration.between(now, entry.getExpiresAt());
 			final long roundedSeconds = remaining.getSeconds() + (remaining.getNano() == 0 ? 0 : 1);
 			final String seconds = Long.toString(Math.max(0, roundedSeconds));
-			final String id = Long.toString(entry.getId());
-			final boolean candidate = key.equals(entry.getCandidateKey());
+			output.append(L("Expires in @x1 seconds.\n\r", seconds));
 
 			if(entry.getType() == Type.INVITATION)
 			{
 				if(candidate)
-					character.tell(L("@x1 invited you to their party. @x2 seconds left. Use PARTY ACCEPT @x3 or PARTY DECLINE @x3.",
-							entry.getSenderKey(), seconds, id));
+				{
+					if(hasUniqueInvitationSender(pending, key, entry.getSenderKey()))
+						appendPendingCommand(output, "ACCEPT", entry.getSenderKey());
+					appendPendingCommand(output, "ACCEPT", id);
+					appendPendingCommand(output, "DECLINE", id);
+				}
 				else
-					character.tell(L("Your party invited @x1. @x2 seconds left. Use PARTY CANCEL @x3.",
-							entry.getCandidateKey(), seconds, id));
+					appendPendingCommand(output, "CANCEL", id);
 			}
 			else
 			{
 				if(candidate)
-					character.tell(L("You asked to join @x1's party. @x2 seconds left. Use PARTY CANCEL @x3.",
-							view.getLeaderKey(), seconds, id));
+					appendPendingCommand(output, "CANCEL", id);
 				else
-					character.tell(L("@x1 asked to join your party. @x2 seconds left. Use PARTY APPROVE @x3 or PARTY DECLINE @x3.",
-							entry.getCandidateKey(), seconds, id));
+				{
+					appendPendingCommand(output, "APPROVE", entry.getCandidateKey());
+					appendPendingCommand(output, "APPROVE", id);
+					appendPendingCommand(output, "DECLINE", id);
+				}
 			}
 		}
 
 		if(isCombatRestricted(character))
-			character.tell(L("You can act on pending entries after combat if they are still open."));
+			output.append(L("\n\rYou can respond after combat if the invitation or request is still open."));
+		character.tell(output.toString());
+	}
+
+	private void appendPendingCommand(final StringBuilder output, final String action, final String selector)
+	{
+		output.append(L("  PARTY @x1 @x2\n\r", action, selector));
+	}
+
+	private boolean hasUniqueInvitationSender(final List<PendingView> pending, final String recipient, final String sender)
+	{
+		int matches = 0;
+		for(final PendingView view : pending)
+		{
+			final PartyPendingEntry entry = view.getEntry();
+			if((entry.getType() == Type.INVITATION) && recipient.equals(entry.getCandidateKey())
+			&& sender.equalsIgnoreCase(entry.getSenderKey()))
+				matches++;
+		}
+		return matches == 1;
 	}
 
 	/** {@inheritDoc} */
@@ -979,14 +1021,14 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			if(approval)
 			{
 				final String candidateKey = result.getJoinedCandidateKey();
-				actor.tell(L("@x1 joined your party. Use PARTY to see the roster.", candidateKey));
+				actor.tell(L("@x1 joined your party. Use PARTY to see the members.", candidateKey));
 
 				if(candidate != null)
-					candidate.tell(L("@x1 approved your request. You joined the party. Use PARTY to see the roster.",
+					candidate.tell(L("@x1 approved your request. You joined the party. Use PARTY to see the members.",
 							actor.Name()));
 			}
 			else
-				actor.tell(L("You joined the party. Use PARTY to see the roster."));
+				actor.tell(L("You joined the party. Use PARTY to see the members."));
 			break;
 		case ALREADY_MEMBER:
 			actor.tell(approval ? L("That player already belongs to a party.")

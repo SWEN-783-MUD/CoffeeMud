@@ -2,7 +2,11 @@ package com.planet_ink.coffee_mud.Tests;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.UUID;
 
+import com.planet_ink.coffee_mud.Libraries.CMParties;
+import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary.CreateResult;
+import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.party.InMemoryPartyStore;
 import com.planet_ink.coffee_mud.core.party.PartyPendingEntry;
@@ -34,6 +38,7 @@ public class PartyIdLimitTest extends StdTest
 		try
 		{
 			runCases();
+			libraryReportsAllocationFailures(mob.location());
 			return null;
 		}
 		catch(final AssertionError | Exception error)
@@ -100,6 +105,32 @@ public class PartyIdLimitTest extends StdTest
 		final Field counter = InMemoryPartyStore.class.getDeclaredField(name);
 		counter.setAccessible(true);
 		counter.setLong(store, value);
+	}
+
+	private static void libraryReportsAllocationFailures(final Room room) throws Exception
+	{
+		final String suffix = UUID.randomUUID().toString().substring(0, 8);
+		try(PartyInviteCommandTest.TestPlayer alice = new PartyInviteCommandTest.TestPlayer("Idleader" + suffix, room);
+			PartyInviteCommandTest.TestPlayer bob = new PartyInviteCommandTest.TestPlayer("Idguest" + suffix, room))
+		{
+			final CMParties library = new CMParties();
+			final InMemoryPartyStore store = new InMemoryPartyStore();
+			final Field serviceStore = CMParties.class.getDeclaredField("store");
+			serviceStore.setAccessible(true);
+			serviceStore.set(library, store);
+			store.create(alice.getMob().Name());
+			setCounter(store, "nextEntryId", Long.MAX_VALUE);
+			setCounter(store, "nextPartyId", Long.MAX_VALUE);
+
+			check(library.createParty(bob.getMob()) == CreateResult.ID_LIMIT,
+					"The library should return a controlled creation failure.");
+			library.sendInvitation(alice.getMob(), bob.getMob().Name());
+			check(alice.output().contains("Please contact an administrator") && bob.output().isEmpty(),
+					"A failed invitation should explain the issue without notifying the candidate.");
+			library.requestJoin(bob.getMob(), alice.getMob().Name());
+			check(bob.output().contains("Please contact an administrator") && store.pendingEntries(alice.getMob().Name()).isEmpty(),
+					"A failed request should explain the issue without publishing an entry.");
+		}
 	}
 
 	private static void expectLimit(final Runnable operation)

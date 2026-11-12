@@ -216,8 +216,8 @@ public class PartyEncounterTest extends StdTest
 		check(bob.command("EXPLORE","NORMAL").contains("Wait until combat ends"),"Pending setup should protect the activity.");
 		check(!manager.completeEncounter(encounter) && manager.activateEncounter(encounter)
 				&& !manager.activateEncounter(encounter),"Only a pending encounter should activate.");
-		check(alice.command("PARTY").contains("Your party leader"),"Active participants can inspect their party.");
-		check(alice.command("PARTY","PENDING").contains("You can act on pending entries after combat"),
+		check(alice.command("PARTY").contains("You are the party leader"),"Active participants can inspect their party.");
+		check(alice.command("PARTY","PENDING").contains("You can respond after combat"),
 				"Active participants can inspect pending entries.");
 		check(alice.command("PARTY","CANCEL",carolInvite).contains("Wait until combat ends"),
 				"A blocked party change should leave the invite open.");

@@ -43,7 +43,7 @@ public class Explore extends StdCommand
 
 		if(commands.size() == 1)
 		{
-			mob.tell(L("Your exploration activity is @x1.",L(context.activity.label)));
+			mob.tell(L("^HExploration^N\n\rYour exploration activity is @x1.",L(context.activity.label)));
 			showChoices(mob);
 			return false;
 		}
@@ -51,6 +51,7 @@ public class Explore extends StdCommand
 		final Activity activity = Activity.fromCommand(CMParms.combine(commands,1));
 		if(activity == null)
 		{
+			mob.tell(L("Unknown exploration activity '@x1'.", CMParms.combine(commands,1)));
 			showChoices(mob);
 			return false;
 		}
@@ -72,7 +73,8 @@ public class Explore extends StdCommand
 
 	private void showChoices(final MOB mob)
 	{
-		mob.tell(L("Use EXPLORE NORMAL or EXPLORE AVOID NOTICE."));
+		mob.tell(L("  EXPLORE NORMAL         Travel normally\n\r"
+				+ "  EXPLORE AVOID NOTICE   Record a careful approach\n\rUse HELP EXPLORE for details."));
 	}
 
 	/** {@inheritDoc} */

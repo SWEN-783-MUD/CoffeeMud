@@ -85,6 +85,8 @@ public class PartyInviteCommandTest extends StdTest
 				runWalkthrough(alice, bob, hall, passage);
 				runClosureWalkthrough(alice, bob, carol);
 				runRequestWalkthrough(alice, bob, carol);
+				runOfflineApproval(alice, bob);
+				runAmbiguousSenderWalkthrough(alice, bob, carol);
 			}
 			return null;
 		}
@@ -175,7 +177,8 @@ public class PartyInviteCommandTest extends StdTest
 		check(CMLib.parties().findParty(bob.mob) == null, "A crossed request must not admit Bob.");
 
 		final String pending = bob.command("PARTY", "PENDING");
-		check(pending.contains(aliceName) && pending.contains("seconds left") && pending.contains("PARTY ACCEPT " + id),
+		check(pending.contains(aliceName) && pending.contains("Expires in ") && pending.contains("PARTY ACCEPT " + id)
+				&& pending.contains("PARTY ACCEPT " + aliceName),
 				"Pending should show the sender, time remaining, and the original acceptance command.");
 		check(bob.command("PARTY", "ACCEPT", "999999999999999999999999").contains("Use PARTY ACCEPT"),
 				"An out-of-range numeric ID should give the player usage help.");
@@ -256,7 +259,8 @@ public class PartyInviteCommandTest extends StdTest
 		check(bobName.equals(transferred.getLeader()) && transferred.getMembers().equals(Arrays.asList(aliceName, bobName)),
 				"Transfer should keep Alice and preserve the join order.");
 		final String pending = bob.command("PARTY", "PENDING");
-		check(pending.contains(carolName) && pending.contains("seconds left") && pending.contains("PARTY APPROVE " + id),
+		check(pending.contains(carolName) && pending.contains("Expires in ") && pending.contains("PARTY APPROVE " + id)
+				&& pending.contains("PARTY APPROVE " + carolName),
 				"The new leader should see Carol's original request and remaining time.");
 		check(alice.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
 				"Alice should lose the ability to approve.");
@@ -280,6 +284,46 @@ public class PartyInviteCommandTest extends StdTest
 		check(bob.command("PARTY", "LEAVE").contains("You left the party"), "Bob should be able to leave.");
 		check(carol.command("PARTY").contains("Party leader: " + aliceName),
 				"Alice should take over again because she was first to join.");
+	}
+
+	private static void runOfflineApproval(final TestPlayer alice, final TestPlayer bob)
+	{
+		sentId(bob.command("PARTY", "REQUEST", alice.mob.Name()));
+		final Session previous = bob.mob.session();
+		bob.mob.setSession(null);
+		try
+		{
+			check(alice.command("PARTY", "APPROVE", bob.mob.Name()).contains(bob.mob.Name() + " joined your party"),
+					"A name should identify the stored request even while its candidate is offline.");
+		}
+		finally
+		{
+			bob.mob.setSession(previous);
+		}
+		check(CMLib.parties().findParty(bob.mob) != null, "Offline approval should publish the membership.");
+		bob.command("PARTY", "LEAVE");
+	}
+
+	private static void runAmbiguousSenderWalkthrough(final TestPlayer alice, final TestPlayer bob, final TestPlayer carol)
+	{
+		final String first = sentId(alice.command("PARTY", "INVITE", bob.mob.Name()));
+		alice.command("PARTY", "LEADER", carol.mob.Name());
+		alice.command("PARTY", "LEAVE");
+		alice.command("PARTY", "CREATE");
+		final String second = sentId(alice.command("PARTY", "INVITE", bob.mob.Name()));
+
+		final String pending = bob.command("PARTY", "PENDING");
+		check(pending.contains("Current party leader: " + carol.mob.Name())
+				&& pending.contains("PARTY ACCEPT " + first) && pending.contains("PARTY ACCEPT " + second)
+				&& !pending.contains("PARTY ACCEPT " + alice.mob.Name()),
+				"Ambiguous invitations should show both IDs and the changed leader, without a name shortcut.");
+		final String ambiguous = bob.command("PARTY", "ACCEPT", alice.mob.Name());
+		check(ambiguous.contains("More than one") && ambiguous.contains("PARTY ACCEPT " + first)
+				&& ambiguous.contains("PARTY ACCEPT " + second) && CMLib.parties().findParty(bob.mob) == null,
+				"Ambiguous acceptance should show the choices without joining either party.");
+		check(bob.command("PARTY", "ACCEPT", first).contains("You joined the party")
+				&& CMLib.parties().findParty(bob.mob).getLeader().equals(carol.mob.Name()),
+				"The original ID should still select the party whose leadership changed.");
 	}
 
 	private static void checkCombatRestriction(final TestPlayer player, final String action, final String selector)
