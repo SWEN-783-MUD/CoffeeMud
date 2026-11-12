@@ -875,33 +875,45 @@ public class CMParties extends StdLibrary implements PartyLibrary
 	@Override
 	public void acceptInvitation(final MOB character, final long invitationId)
 	{
-		final JoinResult result;
-		synchronized(characterLock)
-		{
-			if(!canManageParty(character))
-				return;
-			result = store.acceptInvitation(characterKey(character),invitationId);
-		}
-		reportJoinResult(character, result, Type.INVITATION, null);
+		joinPending(character, Type.INVITATION, () -> store.acceptInvitation(characterKey(character), invitationId));
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void acceptInvitation(final MOB character, final String senderName)
+	{
+		joinPending(character, Type.INVITATION, () -> store.acceptInvitation(characterKey(character), senderName));
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public void approveRequest(final MOB leader, final long requestId)
 	{
+		joinPending(leader, Type.REQUEST, () -> store.approveRequest(characterKey(leader), requestId));
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public void approveRequest(final MOB leader, final String candidateName)
+	{
+		joinPending(leader, Type.REQUEST, () -> store.approveRequest(characterKey(leader), candidateName));
+	}
+
+	private void joinPending(final MOB actor, final Type type, final Supplier<JoinResult> operation)
+	{
 		final JoinResult result;
 		final MOB candidate;
 		synchronized(characterLock)
 		{
-			if(!canManageParty(leader))
+			if(!canManageParty(actor))
 				return;
-			result = store.approveRequest(characterKey(leader), requestId);
+			result = operation.get();
 
 			// Capture the recipient before a rename or deletion can reuse the key.
 			final String candidateKey = result.getJoinedCandidateKey();
-			candidate = candidateKey == null ? null : findOnlinePlayer(candidateKey);
+			candidate = (type != Type.REQUEST) || (candidateKey == null) ? null : findOnlinePlayer(candidateKey);
 		}
-		reportJoinResult(leader, result, Type.REQUEST, candidate);
+		reportJoinResult(actor, result, type, candidate);
 	}
 
 	/** {@inheritDoc} */
@@ -989,6 +1001,12 @@ public class CMParties extends StdLibrary implements PartyLibrary
 			break;
 		case PARTY_FULL:
 			actor.tell(L("That party is full. You can try again if a seat opens before the deadline."));
+			break;
+		case AMBIGUOUS:
+			actor.tell(L("More than one invitation or request matches that name. Use an ID to choose:"));
+			for(final PendingView choice : result.getMatchingEntries())
+				actor.tell(L("  Party leader: @x1. Use PARTY @x2 @x3.", choice.getLeaderKey(),
+						approval ? "APPROVE" : "ACCEPT", Long.toString(choice.getEntry().getId())));
 			break;
 		}
 	}

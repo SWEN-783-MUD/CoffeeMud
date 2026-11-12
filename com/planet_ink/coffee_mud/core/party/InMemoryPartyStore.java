@@ -323,6 +323,17 @@ public final class InMemoryPartyStore implements PartyStore
 		return join(characterKey, invitationId, Type.INVITATION);
 	}
 
+	/** {@inheritDoc} */
+	@Override
+	public synchronized JoinResult acceptInvitation(final String characterKey, final String senderName)
+	{
+		Objects.requireNonNull(characterKey);
+		Objects.requireNonNull(senderName);
+		if(partyIdsByMember.containsKey(characterKey))
+			return new JoinResult(JoinStatus.ALREADY_MEMBER, null);
+		return joinByName(characterKey, senderName, Type.INVITATION);
+	}
+
 	/**
 	 * {@inheritDoc}
 	 * Checks authority against the current roster under the store lock.
@@ -333,6 +344,36 @@ public final class InMemoryPartyStore implements PartyStore
 	public synchronized JoinResult approveRequest(final String leaderKey, final long requestId)
 	{
 		return join(Objects.requireNonNull(leaderKey), requestId, Type.REQUEST);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public synchronized JoinResult approveRequest(final String leaderKey, final String candidateName)
+	{
+		return joinByName(Objects.requireNonNull(leaderKey), Objects.requireNonNull(candidateName), Type.REQUEST);
+	}
+
+	private JoinResult joinByName(final String actorKey, final String name, final Type type)
+	{
+		final Instant now = clock.get();
+		final List<PendingView> matches = new ArrayList<PendingView>();
+		for(final PartyPendingEntry entry : entriesById.values())
+		{
+			final PartySnapshot party = partiesById.get(Long.valueOf(entry.getPartyId()));
+			if((party == null) || (entry.getType() != type) || entry.isExpired(now)
+			|| !actorKey.equals(responderKey(entry, party)))
+				continue;
+
+			final String other = type == Type.INVITATION ? entry.getSenderKey() : entry.getCandidateKey();
+			if(other.equalsIgnoreCase(name))
+				matches.add(new PendingView(entry, party.getLeader()));
+		}
+
+		if(matches.isEmpty())
+			return new JoinResult(JoinStatus.ENTRY_UNAVAILABLE, null);
+		if(matches.size() > 1)
+			return new JoinResult(JoinStatus.AMBIGUOUS, null, matches);
+		return join(actorKey, matches.get(0).getEntry().getId(), type);
 	}
 
 	private JoinResult join(final String actorKey, final long entryId, final Type type)

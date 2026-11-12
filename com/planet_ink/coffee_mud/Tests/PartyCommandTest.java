@@ -132,7 +132,7 @@ public class PartyCommandTest extends StdTest
 		execute(command, alice, "PARTY", "HELP");
 		final String help = CMStrings.removeColors(String.join("\n", alice.messages));
 		check(help.contains("Joining a party\n\r") && help.contains("Leader commands\n\r")
-				&& help.contains("PARTY APPROVE <id>") && help.contains("HELP FOLLOW"),
+				&& help.contains("PARTY APPROVE <name or id>") && help.contains("HELP FOLLOW"),
 				"Plain text help should group commands and point to related help.");
 		check(service.findParty(alice.mob) == null, "Reading help must not create membership.");
 

@@ -130,6 +130,17 @@ public interface PartyStore
 	JoinResult acceptInvitation(String characterKey, long invitationId);
 
 	/**
+	 * Accepts the recipient's single live invitation from an exact sender name,
+	 * ignoring case. Resolves the name and joins in one operation. Ambiguous
+	 * names return their matching invitations without admitting the character.
+	 *
+	 * @param characterKey the recipient accepting an invitation
+	 * @param senderName the original sender name shown on the invitation
+	 * @return the admission result or the matching choices when ambiguous
+	 */
+	JoinResult acceptInvitation(String characterKey, String senderName);
+
+	/**
 	 * Lets the current leader approve a request and add the candidate in one
 	 * operation. A successful join clears the candidate's other pending entries.
 	 *
@@ -138,6 +149,16 @@ public interface PartyStore
 	 * @return the outcome of the approval attempt
 	 */
 	JoinResult approveRequest(String leaderKey, long requestId);
+
+	/**
+	 * Approves a live request by exact candidate name, ignoring case. The
+	 * current leader's authority and the admission are checked in one operation.
+	 *
+	 * @param leaderKey the current party leader
+	 * @param candidateName the name shown on the request
+	 * @return the admission result or the matching choices when ambiguous
+	 */
+	JoinResult approveRequest(String leaderKey, String candidateName);
 
 	/**
 	 * Lets the invited character decline an invitation or the current leader
@@ -226,7 +247,9 @@ public interface PartyStore
 		/** The entry reached its deadline before acceptance or approval. */
 		EXPIRED,
 		/** The party is full. The actor can retry before the deadline. */
-		PARTY_FULL
+		PARTY_FULL,
+		/** More than one live entry matches the supplied name. No membership changed. */
+		AMBIGUOUS
 	}
 
 	/** Pairs the opening outcome with the entry needed for player feedback. */
@@ -276,6 +299,8 @@ public interface PartyStore
 
 		private final String joinedCandidateKey;
 
+		private final List<PendingView> matchingEntries;
+
 		/**
 		 * Records a join outcome so the caller can report it after the store releases its lock.
 		 *
@@ -284,8 +309,21 @@ public interface PartyStore
 		 */
 		public JoinResult(final JoinStatus status, final String joinedCandidateKey)
 		{
+			this(status, joinedCandidateKey, Collections.emptyList());
+		}
+
+		/**
+		 * Captures the entries a player must distinguish by ID after an ambiguous name.
+		 *
+		 * @param status the admission result
+		 * @param joinedCandidateKey the admitted character, or null
+		 * @param matchingEntries the name matches, copied into a read-only list
+		 */
+		public JoinResult(final JoinStatus status, final String joinedCandidateKey, final List<PendingView> matchingEntries)
+		{
 			this.status = status;
 			this.joinedCandidateKey = joinedCandidateKey;
+			this.matchingEntries = Collections.unmodifiableList(new ArrayList<PendingView>(matchingEntries));
 		}
 
 		/**
@@ -306,6 +344,16 @@ public interface PartyStore
 		public String getJoinedCandidateKey()
 		{
 			return joinedCandidateKey;
+		}
+
+		/**
+		 * Returns fixed choices for an ambiguous name, including the leader at lookup.
+		 *
+		 * @return a read-only list, empty for results without ambiguity
+		 */
+		public List<PendingView> getMatchingEntries()
+		{
+			return matchingEntries;
 		}
 	}
 

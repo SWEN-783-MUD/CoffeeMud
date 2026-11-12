@@ -367,12 +367,31 @@ public interface PartyLibrary extends CMLibrary
 	public void acceptInvitation(MOB character, long invitationId);
 
 	/**
+	 * Accepts a live invitation by the original sender's exact character name,
+	 * ignoring case. Shows ID choices if that name matches multiple invitations.
+	 * The sender does not need an online session.
+	 *
+	 * @param character the recipient accepting the invitation
+	 * @param senderName the name displayed on the invitation
+	 */
+	public void acceptInvitation(MOB character, String senderName);
+
+	/**
 	 * Lets the current leader approve a request and tells the candidate if online.
 	 *
 	 * @param leader the player approving the request
 	 * @param requestId the ID supplied by the leader
 	 */
 	public void approveRequest(MOB leader, long requestId);
+
+	/**
+	 * Lets the current leader approve by exact candidate name, ignoring case.
+	 * Uses the stored request even when the candidate is offline.
+	 *
+	 * @param leader the player approving the request
+	 * @param candidateName the candidate name displayed on the request
+	 */
+	public void approveRequest(MOB leader, String candidateName);
 
 	/**
 	 * Turns down an invitation or request if the player is allowed to respond.

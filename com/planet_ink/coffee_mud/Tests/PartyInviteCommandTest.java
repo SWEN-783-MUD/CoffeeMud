@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 import com.planet_ink.coffee_mud.Areas.interfaces.Area;
 import com.planet_ink.coffee_mud.Common.FakeSession;
 import com.planet_ink.coffee_mud.Common.interfaces.PlayerStats;
+import com.planet_ink.coffee_mud.Common.interfaces.Session;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMClass;
@@ -176,14 +177,27 @@ public class PartyInviteCommandTest extends StdTest
 		final String pending = bob.command("PARTY", "PENDING");
 		check(pending.contains(aliceName) && pending.contains("seconds left") && pending.contains("PARTY ACCEPT " + id),
 				"Pending should show the sender, time remaining, and the original acceptance command.");
-		check(bob.command("PARTY", "ACCEPT", "not-an-id").contains("Use PARTY ACCEPT"),
-				"An invalid ID should give the player usage help.");
+		check(bob.command("PARTY", "ACCEPT", "999999999999999999999999").contains("Use PARTY ACCEPT"),
+				"An out-of-range numeric ID should give the player usage help.");
+		check(bob.command("PARTY", "ACCEPT", aliceName.substring(0, 4)).contains("unavailable"),
+				"A partial name must not accept an invitation.");
 
 		checkCombatRestriction(bob, "ACCEPT", id);
+		checkCombatRestriction(bob, "ACCEPT", aliceName);
 		check(CMLib.parties().findParty(bob.mob) == null, "A blocked acceptance should leave membership empty.");
 
 		// Joining updates the roster while the players stay in their own rooms.
-		check(bob.command("PARTY", "ACCEPT", id).contains("You joined the party"), "Bob should join after combat.");
+		final Session senderSession = alice.mob.session();
+		alice.mob.setSession(null);
+		try
+		{
+			check(bob.command("PARTY", "ACCEPT", aliceName.toUpperCase(Locale.ROOT)).contains("You joined the party"),
+					"Bob should accept a stored invitation by exact name even while its sender is offline.");
+		}
+		finally
+		{
+			alice.mob.setSession(senderSession);
+		}
 		final PartySnapshot joined = CMLib.parties().findParty(bob.mob);
 		check(joined != null && joined.getMembers().equals(Arrays.asList(aliceName, bobName)),
 				"The roster should include Alice and Bob in join order.");
@@ -246,15 +260,18 @@ public class PartyInviteCommandTest extends StdTest
 				"The new leader should see Carol's original request and remaining time.");
 		check(alice.command("PARTY", "APPROVE", id).contains("That request is unavailable"),
 				"Alice should lose the ability to approve.");
+		check(alice.command("PARTY", "APPROVE", carolName).contains("That request is unavailable"),
+				"The former leader must also lose approval authority when using a name.");
 		check(carol.command("PARTY", "PENDING").contains("You asked to join " + bobName),
 				"Carol's outgoing request should name the new leader.");
 		checkCombatRestriction(bob, "APPROVE", id);
+		checkCombatRestriction(bob, "APPROVE", carolName);
 		check(CMLib.parties().findParty(carol.mob) == null, "A blocked approval should leave membership empty.");
 
 		// Approval sends feedback to both sides and keeps their positions and follow links.
 		final Room carolRoom = carol.mob.location();
-		check(bob.command("PARTY", "APPROVE", id).contains(carolName + " joined your party"),
-				"The current leader should be able to approve after combat.");
+		check(bob.command("PARTY", "APPROVE", carolName.toUpperCase(Locale.ROOT)).contains(carolName + " joined your party"),
+				"The current leader should be able to approve by candidate name after combat.");
 		check(carol.output().contains(bobName + " approved your request"), "Carol should be notified of approval.");
 		check(carol.command("PARTY").contains("Party leader: " + bobName),
 				"Carol should see the new roster after approval.");
@@ -265,7 +282,7 @@ public class PartyInviteCommandTest extends StdTest
 				"Alice should take over again because she was first to join.");
 	}
 
-	private static void checkCombatRestriction(final TestPlayer player, final String action, final String id)
+	private static void checkCombatRestriction(final TestPlayer player, final String action, final String selector)
 	{
 		final Room room = player.mob.location();
 		final MOB opponent = CMClass.getMOB("StdMOB");
@@ -276,9 +293,9 @@ public class PartyInviteCommandTest extends StdTest
 			room.addInhabitant(opponent);
 			player.mob.setVictim(opponent);
 			check(player.mob.isInCombat(), "The fixture should put the player in combat.");
-			check(player.command("PARTY", "PENDING").contains("PARTY " + action + " " + id),
+			check(player.command("PARTY", "PENDING").contains("PARTY " + action + " "),
 					"Combat should allow pending reads.");
-			check(player.command("PARTY", action, id).contains("Wait until combat ends"),
+			check(player.command("PARTY", action, selector).contains("Wait until combat ends"),
 					"Combat should block " + action + ".");
 		}
 		finally

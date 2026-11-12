@@ -118,6 +118,15 @@ public class Party extends StdCommand
 			break;
 		case "ACCEPT":
 		case "APPROVE":
+			if(!argument.matches("[+-]?[0-9]+"))
+			{
+				if(action.equals("ACCEPT"))
+					parties.acceptInvitation(mob, argument);
+				else
+					parties.approveRequest(mob, argument);
+				break;
+			}
+			// Numeric selectors retain their range checks before reaching the store.
 		case "DECLINE":
 		case "CANCEL":
 			final long id = readPendingId(mob, action, argument);
@@ -181,7 +190,8 @@ public class Party extends StdCommand
 			// Invalid text and IDs outside the supported range use the same help.
 		}
 
-		mob.tell(L("Use PARTY @x1 <id>. Use PARTY PENDING to find the ID.", action));
+		final String selector = action.equals("ACCEPT") || action.equals("APPROVE") ? L("<name or id>") : L("<id>");
+		mob.tell(L("Use PARTY @x1 @x2. Use PARTY PENDING to see your invitations and requests.", action, selector));
 		return 0;
 	}
 
@@ -195,11 +205,11 @@ public class Party extends StdCommand
 
 		help.append(L("\n\r^HJoining a party^N\n\r"));
 		appendHelpLine(help, "PARTY REQUEST <leader>", "Ask to join a party");
-		appendHelpLine(help, "PARTY ACCEPT <id>", "Accept an invitation");
+		appendHelpLine(help, "PARTY ACCEPT <name or id>", "Accept an invitation");
 
 		help.append(L("\n\r^HLeader commands^N\n\r"));
 		appendHelpLine(help, "PARTY INVITE <name>", "Invite a player");
-		appendHelpLine(help, "PARTY APPROVE <id>", "Approve a join request");
+		appendHelpLine(help, "PARTY APPROVE <name or id>", "Approve a join request");
 		appendHelpLine(help, "PARTY LEADER <name>", "Pass leadership to a member");
 
 		help.append(L("\n\r^HInvitations and requests^N\n\r"));
@@ -211,7 +221,7 @@ public class Party extends StdCommand
 
 	private void appendHelpLine(final StringBuilder help, final String syntax, final String description)
 	{
-		help.append("  ").append(CMStrings.padRight(L(syntax), 27)).append(L(description)).append("\n\r");
+		help.append("  ").append(CMStrings.padRight(L(syntax), 28)).append("  ").append(L(description)).append("\n\r");
 	}
 
 	private void showParty(final MOB mob, final PartySnapshot party)
@@ -258,6 +268,9 @@ public class Party extends StdCommand
 			break;
 		case "ACCEPT":
 		case "APPROVE":
+			argument = " <name or id>";
+			example = " Alice";
+			break;
 		case "DECLINE":
 		case "CANCEL":
 			argument = " <id>";
