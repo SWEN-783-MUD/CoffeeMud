@@ -155,11 +155,7 @@ public class Go extends StdCommand
 		final String doing=commands.get(0);
 		if(direction>=0)
 		{
-			final boolean success;
-			if(running)
-				success=CMLib.tracking().run(mob,direction,false,false,false,false);
-			else
-				success=CMLib.tracking().walk(mob,direction,false,false,false,false);
+			final boolean success=CMLib.tracking().travel(mob,direction,running,metaFlags);
 			if(!success)
 				mob.clearCommandQueue();
 		}
@@ -167,7 +163,7 @@ public class Go extends StdCommand
 		{
 			Exit E=R.fetchExit(whereStr);
 			if(E != null)
-				return CMLib.commands().forceStandardCommand(mob, "Enter", commands);
+				return CMClass.getCommand("Enter").execute(mob,commands,metaFlags);
 
 			boolean doneAnything=false;
 			final List<List<String>> prequeCommands=new ArrayList<List<String>>();
@@ -216,13 +212,7 @@ public class Go extends StdCommand
 					{
 						if(mob.isMonster())
 						{
-							if(running)
-							{
-								if(!CMLib.tracking().run(mob,direction,false,false,false,false))
-									return false;
-							}
-							else
-							if(!CMLib.tracking().walk(mob,direction,false,false,false,false))
+							if(!CMLib.tracking().travel(mob,direction,running,metaFlags))
 								return false;
 						}
 						else

@@ -247,6 +247,34 @@ public class DBConnector
 	}
 
 	/**
+	 * Executes a single write that must report its result now.
+	 * Identity changes use this so a queued retry cannot change a character later.
+	 *
+	 * @param updateString the SQL update to execute
+	 * @return the affected row count, or {@code -1} if the write failed
+	 */
+	int updateOnce(final String updateString)
+	{
+		final DBConnection connection = DBFetch();
+		if(connection == null)
+			return -1;
+
+		try
+		{
+			return connection.updateOnce(updateString);
+		}
+		catch(final SQLException error)
+		{
+			// The connection already logged the failure.
+			return -1;
+		}
+		finally
+		{
+			DBDone(connection);
+		}
+	}
+
+	/**
 	 * Execute a series of SQL statements with CLOB parameters.
 	 * @param updateStrings the SQL update strings to execute
 	 * @param values the CLOB values to set on the prepared statements.

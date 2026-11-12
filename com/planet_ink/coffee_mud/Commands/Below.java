@@ -51,10 +51,7 @@ public class Below extends Go
 	{
 		if(!standIfNecessary(mob,commands, metaFlags, true))
 			return false;
-		if(mob.isAttributeSet(MOB.Attrib.AUTORUN))
-			CMLib.tracking().run(mob, Directions.DOWN, false,false,false);
-		else
-			CMLib.tracking().walk(mob, Directions.DOWN, false,false,false);
+		CMLib.tracking().travel(mob, Directions.DOWN, mob.isAttributeSet(MOB.Attrib.AUTORUN), metaFlags);
 		return false;
 	}
 

@@ -99,7 +99,7 @@ public class Enter extends Go
 				return false;
 			}
 		}
-		CMLib.tracking().walk(mob,dir,false,false,false);
+		CMLib.tracking().travel(mob,dir,false,metaFlags);
 		return false;
 	}
 

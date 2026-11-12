@@ -51,10 +51,7 @@ public class Southeast extends Go
 	{
 		if(!standIfNecessary(mob,commands, metaFlags, true))
 			return false;
-		if(mob.isAttributeSet(MOB.Attrib.AUTORUN))
-			CMLib.tracking().run(mob, Directions.SOUTHEAST, false,false,false);
-		else
-			CMLib.tracking().walk(mob, Directions.SOUTHEAST, false,false,false);
+		CMLib.tracking().travel(mob, Directions.SOUTHEAST, mob.isAttributeSet(MOB.Attrib.AUTORUN), metaFlags);
 		return false;
 	}
 

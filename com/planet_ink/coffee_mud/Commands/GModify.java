@@ -614,9 +614,13 @@ public class GModify extends StdCommand
 						if((E instanceof MOB)&&(((MOB)E).isPlayer()))
 						{
 							final String msgStr = E.Name()+" in "+room.roomID()+" was DESTROYED by "+mob.Name()+"!";
+							if(!CMLib.players().obliteratePlayer((MOB)E, true, true))
+							{
+								mob.tell(CMLib.lang().L(GModify.class, "The character '@x1' could not be deleted.", E.Name()));
+								return E;
+							}
 							mob.tell(msgStr);
 							Log.sysOut("GMODIFY",msgStr);
-							CMLib.players().obliteratePlayer((MOB)E, true, true);
 						}
 						else
 						{

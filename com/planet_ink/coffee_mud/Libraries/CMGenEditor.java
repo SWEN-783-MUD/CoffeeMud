@@ -11696,6 +11696,7 @@ public class CMGenEditor extends StdLibrary implements GenericEditor
 		}
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public void modifyPlayer(final MOB mob, final MOB me, int showFlag) throws IOException
 	{
@@ -11705,14 +11706,14 @@ public class CMGenEditor extends StdLibrary implements GenericEditor
 		if((showFlag == -1) && (CMProps.getIntVar(CMProps.Int.EDITORTYPE)>0))
 			showFlag=-999;
 		final String oldName=me.Name();
+		String newName=oldName;
 		if(CMProps.isUsingAccountSystem())
 			mob.tell(L("*. Account: '@x1'.",((me.playerStats()!=null)&&(me.playerStats().getAccount()!=null))?me.playerStats().getAccount().getAccountName():L("None")));
 		while((mob.session()!=null)&&(!mob.session().isStopped())&&(!ok))
 		{
 			int showNumber=0;
-			genName(mob,me,++showNumber,showFlag);
-			String newName=CMStrings.capitalizeAndLower(me.Name());
-			me.setName(oldName);
+			// Keep an edited name in the menu until the player directory saves it.
+			newName=CMStrings.capitalizeAndLower(prompt(mob,newName,++showNumber,showFlag,L("Name"),false,false));
 			while(
 			(!newName.equals(oldName))
 			&&(CMLib.players().playerExists(newName))
@@ -11720,11 +11721,8 @@ public class CMGenEditor extends StdLibrary implements GenericEditor
 			&&(!mob.session().isStopped()))
 			{
 				mob.tell(L("The name given cannot be chosen, as it is already being used."));
-				genName(mob,me,showNumber,showNumber); // showNumber twice to force the issue
-				newName=CMStrings.capitalizeAndLower(me.Name());
-				me.setName(oldName);
+				newName=CMStrings.capitalizeAndLower(prompt(mob,newName,showNumber,showNumber,L("Name"),false,false));
 			}
-			me.setName(newName);
 
 			if(CMProps.isUsingAccountSystem())
 			{
@@ -11850,14 +11848,18 @@ public class CMGenEditor extends StdLibrary implements GenericEditor
 			me.recoverMaxState();
 			me.recoverPhyStats();
 			me.resetToMaxState();
-			if(!oldName.equals(me.Name()))
+			if(!oldName.equals(newName))
 			{
 				if(mob.session()!=null)
 					mob.session().print(L("Changing player name..."));
-				CMLib.players().renamePlayer(me, oldName);
-				if(mob.session()!=null)
-					mob.session().println(".");
-				Log.sysOut("CMGenEditor",mob.Name()+" changed user "+oldName+" to "+me.name());
+				if(CMLib.players().renamePlayer(me, oldName, newName))
+				{
+					if(mob.session()!=null)
+						mob.session().println(".");
+					Log.sysOut("CMGenEditor",mob.Name()+" changed user "+oldName+" to "+me.name());
+				}
+				else
+					mob.tell(L("The player name could not be changed."));
 			}
 			Log.sysOut("CMGenEditor",mob.Name()+" edited user "+me.name());
 			CMLib.database().DBUpdatePlayer(me);
