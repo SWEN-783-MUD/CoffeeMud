@@ -1,4 +1,5 @@
 package com.planet_ink.coffee_mud.Commands;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.core.interfaces.*;
 import com.planet_ink.coffee_mud.core.*;
 import com.planet_ink.coffee_mud.core.collections.*;
@@ -156,6 +157,15 @@ public class Kill extends StdCommand
 			return false;
 		}
 
+		if(usesEncounterInitiation(mob))
+		{
+			if(CMLib.combat().postAttack(mob,target,mob.fetchWieldedItem()))
+				mob.tell(L("An encounter with @x1 is pending.",target.name(mob)));
+			else
+				CMLib.commands().postCommandFail(mob,origCmds,L("You cannot start an encounter with @x1 here.",target.name(mob)));
+			return false;
+		}
+
 		if(mob.isInCombat())
 		{
 			final MOB oldVictim=mob.getVictim();
@@ -223,13 +233,26 @@ public class Kill extends StdCommand
 	@Override
 	public double combatActionsCost(final MOB mob, final List<String> cmds)
 	{
+		if(usesEncounterInitiation(mob))
+			return 0.0;
 		return CMProps.getCommandCombatActionCost(ID());
 	}
 
 	@Override
 	public double actionsCost(final MOB mob, final List<String> cmds)
 	{
+		if(usesEncounterInitiation(mob))
+			return 0.0;
 		return CMProps.getCommandActionCost(ID());
+	}
+
+	private boolean usesEncounterInitiation(final MOB mob)
+	{
+		if((mob==null)||mob.isMonster())
+			return false;
+		final Room room=mob.location();
+		final EncounterManager manager=(room==null)?null:room.getEncounterManager();
+		return (manager!=null)&&manager.isEnabled();
 	}
 
 	@Override

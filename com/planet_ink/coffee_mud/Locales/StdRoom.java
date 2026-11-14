@@ -1,4 +1,5 @@
 package com.planet_ink.coffee_mud.Locales;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.AchievementLibrary.Event;
 import com.planet_ink.coffee_mud.Libraries.interfaces.XMLLibrary.*;
@@ -39,6 +40,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 */
 public class StdRoom implements Room
 {
+	/** Each room owns its encounter manager, including copied rooms. */
+	private EncounterManager encounterManager=new EncounterManager(this);
+
+	@Override
+	public EncounterManager getEncounterManager()
+	{
+		return encounterManager;
+	}
+
 	@Override
 	public String ID()
 	{
@@ -337,6 +347,7 @@ public class StdRoom implements Room
 		try
 		{
 			final StdRoom R=(StdRoom)this.clone();
+			R.encounterManager=new EncounterManager(R);
 			//CMClass.bumpCounter(R,CMClass.CMObjectType.LOCALE);//removed for mem & perf
 			R.xtraValues=(xtraValues==null)?null:(String[])xtraValues.clone();
 			R.cloneFix(this);
@@ -746,6 +757,12 @@ public class StdRoom implements Room
 	{
 		if(!getArea().okMessage(this,msg))
 			return false;
+		if(msg.targetMinor()==CMMsg.TYP_ENC_BEGIN)
+		{
+			if((!(msg.target() instanceof MOB))
+			||(!getEncounterManager().canStartEncounter(msg.source(),(MOB)msg.target())))
+				return false;
+		}
 
 		if(msg.amITarget(this))
 		{
@@ -906,6 +923,8 @@ public class StdRoom implements Room
 	public void executeMsg(final Environmental myHost, final CMMsg msg)
 	{
 		getArea().executeMsg(this,msg);
+		if((msg.targetMinor()==CMMsg.TYP_ENC_BEGIN)&&(msg.target() instanceof MOB))
+			msg.setValue(getEncounterManager().startEncounter(msg.source(),(MOB)msg.target()) ? 1 : 0);
 
 		if(msg.amITarget(this))
 		{
