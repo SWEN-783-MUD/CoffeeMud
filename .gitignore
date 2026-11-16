@@ -1,5 +1,7 @@
 *.class
 mud*.log
 resources/fakedb/
+
+# Test runs and Python caches
 test-output/
 __pycache__/

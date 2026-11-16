@@ -35,7 +35,7 @@ Group names and test IDs are matched exactly, ignoring case. An unknown or empty
 
 Host group selections omit tests tagged `ci_exclude` and log the exclusions. A selection with no remaining tests fails. Use `--test <ID>` to investigate an excluded test explicitly; the in-game `TEST` command is unaffected.
 
-Tests also have `exec_` groups describing their execution requirements, alongside the existing feature groups. See [execution classifications and the complete inventory](CLASSIFICATION.md) for the categories, limitations, and selection examples. These labels do not change the default CI selection.
+Tests also have `exec_` groups describing their execution requirements, alongside the existing feature groups. See [execution classifications and the complete inventory](CLASSIFICATION.md) for the categories, limitations, and selection examples. The dedicated party matrix suite preserves all party feature coverage; categorical suites also exercise those fixtures according to their execution requirements.
 
 Use `--skip-standalone` to run only the registered host selection. This lets another epic reuse the host harness without depending on the standalone party fixtures.
 
@@ -57,10 +57,11 @@ python -m unittest discover -s tests -p test_launcher.py -v
 
 ### Local equivalents of the CI jobs
 
-With JDK 17 selected, run these as independent jobs. Each host invocation compiles fresh classes and creates its own disposable runtime and result directory. Core also runs the harness contracts and standalone party fixtures.
+With JDK 17 selected, run these commands sequentially on a workstation; concurrent full compiles can exceed the compilation deadline. CI runs them on independent workers. Each host invocation compiles fresh classes and creates its own disposable runtime and result directory. Core also runs the harness contracts and standalone party fixtures.
 
 ```text
 python -m unittest discover -s tests -p test_launcher.py -v
+python tests/run_tests.py --group party --skip-standalone
 python tests/run_tests.py --group exec_core --verify-harness
 python tests/run_tests.py --group exec_integration --skip-standalone
 python tests/run_tests.py --group exec_randomized --skip-standalone --test-timeout 180 --timeout 900
@@ -69,6 +70,6 @@ python tests/run_tests.py --group exec_stress --skip-standalone --test-timeout 1
 
 The stress test needs more than the default 30-second per-test deadline. Group runs filter `ci_exclude`; this job selection does not include world, benchmark, manual, or placeholder groups.
 
-`test-coffeemud.yaml` runs a launcher-check job and four independent matrix jobs for core, integration, randomized, and stress checks on pushes, pull requests, and manual runs. All jobs use Windows and Python 3.13; the Java suites use JDK 17. Core also verifies the Java harness contracts and standalone party fixtures. Matrix fail-fast is disabled so a failure in one suite does not cancel the others. Each suite uploads its own logs and XML results even after a failed test step, retained for seven days. This workflow is separate from the existing distribution/release workflow.
+`test-coffeemud.yaml` runs a launcher-check job and five independent matrix jobs for party, core, integration, randomized, and stress checks on pushes, pull requests, and manual runs. All jobs use Windows and Python 3.13; the Java suites use JDK 17. Core also verifies the Java harness contracts and standalone party fixtures. Matrix fail-fast is disabled so a failure in one suite does not cancel the others. Each suite uploads its own logs and XML results even after a failed test step, retained for seven days. This workflow is separate from the existing distribution/release workflow.
 
 To add coverage, write a `StdTest` with a `getTestGroups()` category and add your assertions to `doTest`. Existing tests remain available through `TEST <group>` in-game. Keep socket login, reconnect, and client rendering checks separate from this programmatic test context.

@@ -61,10 +61,7 @@ public class Starboard extends Go
 		}
 		if(!standIfNecessary(mob,commands, metaFlags, true))
 			return false;
-		if(mob.isAttributeSet(MOB.Attrib.AUTORUN))
-			CMLib.tracking().run(mob, direction, false,false,false);
-		else
-			CMLib.tracking().walk(mob, direction, false,false,false);
+		CMLib.tracking().travel(mob, direction, mob.isAttributeSet(MOB.Attrib.AUTORUN), metaFlags);
 		return false;
 	}
 

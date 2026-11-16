@@ -5783,8 +5783,12 @@ public class Import extends StdCommand
 							else
 							if((session!=null)&&(!session.confirm(L("Player: \"@x1\" exists, obliterate first?",M.Name()),"Y")))
 								continue;
-							else
-								CMLib.players().obliteratePlayer(CMLib.players().getLoadPlayer(M.Name()),false,CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY));
+							if(!CMLib.players().obliteratePlayer(CMLib.players().getLoadPlayer(M.Name()),
+									false,CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY)))
+							{
+								returnAnError(session,"Could not replace player '"+M.Name()+"'. Skipping.",compileErrors,errorList);
+								continue;
+							}
 						}
 						if(M.playerStats()!=null)
 							M.playerStats().setLastUpdated(System.currentTimeMillis());

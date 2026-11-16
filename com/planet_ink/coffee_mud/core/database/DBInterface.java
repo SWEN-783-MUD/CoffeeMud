@@ -399,10 +399,11 @@ public class DBInterface implements DatabaseEngine
 		mobLoader.DBScanPridePlayerWinners(callBack, scanCPUPercent);
 	}
 
+	/** {@inheritDoc} */
 	@Override
-	public void DBPlayerNameChange(final String oldName, final String newName)
+	public boolean DBPlayerNameChange(final String oldName, final String newName)
 	{
-		mobLoader.DBNameChange(oldName, newName);
+		return mobLoader.DBNameChange(oldName, newName);
 	}
 
 	@Override
@@ -1136,10 +1137,11 @@ public class DBInterface implements DatabaseEngine
 		return mobLoader.DBScanFollowers(mobName);
 	}
 
+	/** {@inheritDoc} */
 	@Override
-	public void DBDeletePlayerOnly(final String mobName)
+	public boolean DBDeletePlayerOnly(final String mobName)
 	{
-		mobLoader.DBDeleteCharOnly(mobName);
+		return mobLoader.DBDeleteCharOnly(mobName);
 	}
 
 	@Override

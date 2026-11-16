@@ -1278,6 +1278,8 @@ public interface CMMsg extends CMCommon
 	public static final int TYP_QUESTSTOP=153;
 	/** MINOR_MASK minor action code type, denoting an advancement in age */
 	public static final int TYP_AGE=154;
+	/** Requests creation of a pending tactical encounter. */
+	public static final int TYP_ENC_BEGIN=155;
 
 	/** MINOR_MASK minor action code type, denoting a channel action -- 2000-2047 are channels*/
 	public static final int TYP_CHANNEL=2000; //(2000-2047 are channels)
@@ -1309,7 +1311,8 @@ public interface CMMsg extends CMCommon
 		"WROTE", "REWRITE", "WASREAD", "PREMOVE", "THINK", "STARTUP", "RPXPCHANGE",
 		"COMMANDREJECT","RECIPELEARNED", "GRAVITY", "LEGALSTATE", "NEWROOM","CAUSESINK",
 		"ENDQUEST","WINQUEST","HOLYEVENT","EMISSION", "BODYDROP", "GLANCE", "RITUAL",
-		"PUFF", "TRAIN", "BROKERADD", "NEEDRELOAD", "SKILLFAIL","POLYMORPH","ACHIEVE"
+		"PUFF", "TRAIN", "BROKERADD", "NEEDRELOAD", "SKILLFAIL","POLYMORPH","ACHIEVE",
+		"QUESTSTART","QUESTSTOP","AGE","ENC_BEGIN"
 	};
 
 	/** Index string descriptions of all the MAJOR_MASK code MAKS_s */

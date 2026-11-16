@@ -51,10 +51,7 @@ public class North extends Go
 	{
 		if(!standIfNecessary(mob,commands,metaFlags, true))
 			return false;
-		if(mob.isAttributeSet(MOB.Attrib.AUTORUN))
-			CMLib.tracking().run(mob, Directions.NORTH, false,false,false);
-		else
-			CMLib.tracking().walk(mob, Directions.NORTH, false,false,false);
+		CMLib.tracking().travel(mob, Directions.NORTH, mob.isAttributeSet(MOB.Attrib.AUTORUN), metaFlags);
 		return false;
 	}
 

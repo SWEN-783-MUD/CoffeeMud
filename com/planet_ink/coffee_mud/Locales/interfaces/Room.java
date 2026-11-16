@@ -1,4 +1,5 @@
 package com.planet_ink.coffee_mud.Locales.interfaces;
+import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.core.interfaces.*;
 import com.planet_ink.coffee_mud.core.interfaces.ItemPossessor.Expire;
 import com.planet_ink.coffee_mud.core.*;
@@ -45,6 +46,14 @@ import java.util.*;
  */
 public interface Room extends PhysicalAgent, ItemPossessor, Places, MOBPossessor
 {
+	/**
+	 * Returns this room's encounter manager. Unloaded room placeholders do
+	 * not manage encounters and return null; use a loaded room instead.
+	 *
+	 * @return this room's encounter manager, or null for an unloaded placeholder
+	 */
+	public EncounterManager getEncounterManager();
+
 	/**
 	 * The room ID is the "address" of the room on the world map.  It
 	 * is generally of the format [AREA NAME]#[ID NUMBER] for primary

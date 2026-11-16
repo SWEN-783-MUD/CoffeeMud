@@ -2,7 +2,7 @@
 
 Each concrete registered Java test has one `exec_` group in addition to its existing groups. Existing group membership and test bodies are preserved. `StdTest` and `PropTest` are support classes and remain unclassified.
 
-These labels describe execution requirements. They are not runtime measurements or a guarantee that every group is ready to gate pull requests. The test workflow runs `exec_core`, `exec_integration`, `exec_randomized`, and `exec_stress` as separate jobs, applying the `ci_exclude` filter. The launcher's default selection remains `party`.
+These labels describe execution requirements. They are not runtime measurements or a guarantee that every group is ready to gate pull requests. The test workflow runs `exec_core`, `exec_integration`, `exec_randomized`, and `exec_stress` as separate jobs, alongside a dedicated `party` feature suite, applying the `ci_exclude` filter. The launcher's default selection remains `party`.
 
 | Group | Purpose |
 | --- | --- |
@@ -37,6 +37,8 @@ python tests/run_tests.py --group exec_integration --skip-standalone
 python tests/run_tests.py --group exec_stress --skip-standalone --test-timeout 180 --timeout 300
 ```
 
+The dedicated party suite runs all 12 party fixtures, including those also covered by execution categories. This overlap is intentional so new party fixtures remain covered before classification.
+
 The same labels work in-game, for example `TEST exec_core` and `TEST LIST exec_core`. The launcher runs standalone party fixtures first unless `--skip-standalone` is supplied.
 
 A label does not change assertion handling, provision missing world data, seed randomness, skip placeholders, or supply interactive input. In particular, manual and benchmark groups should be selected deliberately rather than added wholesale to CI. `exec_manual` includes `Yahoomsgrabber`, an importer that can write journal records when supplied arguments and its external archive; it is not an automated regression test.
@@ -49,13 +51,13 @@ A label does not change assertion handling, provision missing world data, seed r
 
 `Spacemovereport1`, `Spacemovereport2`, `Statcreationspeed`, `Timsvalue`.
 
-### `exec_core` (7)
+### `exec_core` (10)
 
-`Cmparms`, `MiniJSONTest`, `MiniTSONTest`, `Parseany`, `PartyMembershipTest`, `Validmisctext`, `XMLManagerTest`.
+`Cmparms`, `MiniJSONTest`, `MiniTSONTest`, `Parseany`, `PartyMembershipTest`, `PartyInvitationTest`, `PartyRequestTest`, `PartySelectorTest`, `Validmisctext`, `XMLManagerTest`.
 
-### `exec_integration` (35)
+### `exec_integration` (42)
 
-`ClockConversion`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
+`ClockConversion`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `ExplorationContextTest`, `PartyEncounterTest`, `PartyFollowTest`, `PartyIdLimitTest`, `PartyInviteCommandTest`, `PartyLifecycleTest`, `PartyTravelTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
 
 ### `exec_manual` (18)
 

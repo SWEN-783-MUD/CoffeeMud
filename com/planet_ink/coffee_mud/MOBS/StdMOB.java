@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.AchievementLibrary.Event;
 import com.planet_ink.coffee_mud.Libraries.interfaces.ChannelsLibrary.CMChannel;
+import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary.FollowResult;
 import com.planet_ink.coffee_mud.Libraries.interfaces.ProtocolLibrary.InProto;
 
 /*
@@ -117,7 +118,9 @@ public class StdMOB implements MOB
 	protected int				wimpHitPoint		= 0;
 	protected int				questPoint			= 0;
 	protected MOB				victim				= null;
-	protected Followable<MOB>	amFollowing			= null;
+	/** The native outgoing follow link, published after updating the follower lists. */
+	protected volatile MOB		amFollowing			= null;
+
 	protected MOB				soulMate			= null;
 	protected int				atRange				= -1;
 	protected long				peaceTime			= 0;
@@ -1764,12 +1767,16 @@ public class StdMOB implements MOB
 		return location;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public void setLocation(final Room newRoom)
 	{
-		lastLocation = location;
-		location = newRoom;
-		if((playerStats != null) && (lastLocation != newRoom))
+		final PartyLibrary parties = isPlayer() ? CMLib.parties() : null;
+		final Room previous = parties == null ? publishLocation(newRoom)
+				: parties.changePlayerLocation(this, () -> publishLocation(newRoom));
+
+		// Update the directory and pose outside the follow lock.
+		if((playerStats != null) && (previous != newRoom))
 		{
 			CMLib.players().changePlayersLocation(this, newRoom);
 			if((!playerStats.isPoseConstant()) && (playerStats.getSavedPose().length()>0))
@@ -1778,6 +1785,15 @@ public class StdMOB implements MOB
 				setDisplayText("");
 			}
 		}
+	}
+
+	// The party library calls this under its lock. Room and directory updates run outside it.
+	private Room publishLocation(final Room newRoom)
+	{
+		final Room previous = location;
+		lastLocation = previous;
+		location = newRoom;
+		return previous;
 	}
 
 	@Override
@@ -3327,7 +3343,8 @@ public class StdMOB implements MOB
 				}
 				break;
 			case CMMsg.TYP_FOLLOW:
-				if(totalFollowers() + srcM.totalFollowers() >= maxFollowers())
+				// The party service checks player-to-player capacity at the actual link update.
+				if((!isPlayer() || !srcM.isPlayer()) && (totalFollowers() + srcM.totalFollowers() >= maxFollowers()))
 				{
 					srcM.tell(L("@x1 can't accept any more followers.", name(srcM)));
 					return false;
@@ -3637,14 +3654,16 @@ public class StdMOB implements MOB
 					{
 						if(!isPlayer())
 							CMLib.awards().giveAutoProperties(me, false);
-						setFollowing((MOB) msg.target());
-						tell(srcM, msg.target(), msg.tool(), msg.sourceMessage());
+						reportFollowChange(msg, trySetFollowing((MOB) msg.target(), null));
 					}
 					break;
 				case CMMsg.TYP_NOFOLLOW:
-					setFollowing(null);
-					tell(srcM, msg.target(), msg.tool(), msg.sourceMessage());
+				{
+					final MOB previous = (msg.target() instanceof MOB) ? (MOB) msg.target() : null;
+					reportFollowChange(msg, trySetFollowing(null,
+							isPlayer() && (previous != null) && previous.isPlayer() ? previous : null));
 					break;
+				}
 				case CMMsg.TYP_WEAR:
 				case CMMsg.TYP_HOLD:
 				case CMMsg.TYP_WIELD:
@@ -4828,7 +4847,7 @@ public class StdMOB implements MOB
 	@Override
 	public MOB getGroupLeader()
 	{
-		Followable<MOB> following = amFollowing;
+		Followable<MOB> following = amFollowing();
 		if(following == null)
 			return this;
 		if(following.amFollowing() == null)
@@ -4844,27 +4863,61 @@ public class StdMOB implements MOB
 		return (MOB) following;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public MOB amFollowing()
 	{
-		final Followable<MOB> following = amFollowing;
-		if(following != null)
-		{
-			if(!following.isFollowedBy(this))
-				amFollowing = null;
-		}
-		return (MOB) amFollowing;
+		final MOB following = amFollowing;
+		// Reading a link must not clear a replacement being published by another thread.
+		return ((following != null) && following.isFollowedBy(this)) ? following : null;
 	}
 
+	/** {@inheritDoc} */
 	@Override
 	public void setFollowing(final MOB mob)
 	{
-		if(mob == this)
-			return;
-		if((amFollowing != null) && (amFollowing != mob))
+		trySetFollowing(mob, null);
+	}
+
+	// Suppress rejected events before they reach room effects and observers.
+	private void reportFollowChange(final CMMsg msg, final FollowResult result)
+	{
+		if(result == FollowResult.ALLOWED)
+			tell(msg.source(), msg.target(), msg.tool(), msg.sourceMessage());
+		else
 		{
-			if(amFollowing.isFollowedBy(this))
-				amFollowing.delFollower(this);
+			if(msg.sourceMessage() != null)
+				tell(L(result.getMessage()));
+			msg.setSourceMessage(null).setTargetMessage(null).setOthersMessage(null);
+			msg.setSourceCode(CMMsg.NO_EFFECT).setTargetCode(CMMsg.NO_EFFECT).setOthersCode(CMMsg.NO_EFFECT);
+		}
+	}
+
+	private FollowResult trySetFollowing(final MOB mob, final MOB expectedTarget)
+	{
+		if(mob == this)
+			return FollowResult.SELF;
+		final PartyLibrary parties = isPlayer() ? CMLib.parties() : null;
+		if(parties != null)
+			return parties.changePlayerFollow(this, mob, () -> {
+				if((expectedTarget != null) && (amFollowing() != expectedTarget))
+					return false;
+				replaceFollowing(mob);
+				return true;
+			});
+		if(isPlayer() && (mob != null) && mob.isPlayer())
+			return FollowResult.OFFLINE;
+		replaceFollowing(mob);
+		return FollowResult.ALLOWED;
+	}
+
+	private void replaceFollowing(final MOB mob)
+	{
+		final MOB previous = amFollowing;
+		if((previous != null) && (previous != mob))
+		{
+			if(previous.isFollowedBy(this))
+				previous.delFollower(this);
 		}
 		if(mob != null)
 		{
