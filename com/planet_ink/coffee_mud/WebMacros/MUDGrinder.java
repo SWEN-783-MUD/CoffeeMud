@@ -368,9 +368,9 @@ public class MUDGrinder extends StdWebMacro
 			for(final Enumeration<String> p=A.getPlayers();p.hasMoreElements();)
 			{
 				final MOB deadMOB=CMLib.players().getLoadPlayer(p.nextElement());
-				CMLib.players().obliteratePlayer(deadMOB,true,CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY));
+				if(!CMLib.players().obliteratePlayer(deadMOB,true,CMSecurity.isDisabled(CMSecurity.DisFlag.DEATHCRY)))
+					return "Account deletion stopped because a character could not be deleted.";
 				Log.sysOut("Grinder",mob.Name()+" destroyed user "+deadMOB.Name()+".");
-				deadMOB.destroy();
 			}
 			CMLib.players().obliterateAccountOnly(A);
 			Log.sysOut("Grinder",mob.Name()+" destroyed account "+A.getAccountName()+" and players '"+playerList+"'.");

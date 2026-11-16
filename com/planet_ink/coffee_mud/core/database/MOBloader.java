@@ -2944,6 +2944,7 @@ public class MOBloader
 			final MOB followM=mob.fetchFollower(f);
 			if((followM!=null)
 			&&(followM.isMonster())
+			&&(!followM.isPlayer())
 			&&(!followM.isPossessing()))
 			{
 				if(CMLib.flags().isSavable(followM))
@@ -3010,17 +3011,27 @@ public class MOBloader
 		DB.updateWithClobs(statements);
 	}
 
-	public void DBNameChange(String oldName, String newName)
+	/**
+	 * Changes the primary character row before updating references to its name.
+	 *
+	 * @param oldName the character's saved name
+	 * @param newName the unused name replacing it
+	 * @return whether the primary character row changed
+	 */
+	public boolean DBNameChange(String oldName, String newName)
 	{
 		if((oldName==null)
 		||(oldName.trim().length()==0)
 		||(newName==null)
 		||(newName.trim().length()==0))
-			return;
+			return false;
 		oldName=DB.injectionClean(oldName);
 		newName=DB.injectionClean(newName);
+
+		// A failed rename must leave the old identity in place, including after a reconnect.
+		if(DB.updateOnce("UPDATE CMCHAR SET CMUSERID='"+newName+"' WHERE CMUSERID='"+oldName+"'") != 1)
+			return false;
 		DB.update("UPDATE CMCHAB SET CMUSERID='"+newName+"' WHERE CMUSERID='"+oldName+"'");
-		DB.update("UPDATE CMCHAR SET CMUSERID='"+newName+"' WHERE CMUSERID='"+oldName+"'");
 		DB.update("UPDATE CMCHAR SET CMWORS='"+newName+"' WHERE CMWORS='"+oldName+"'");
 		DB.update("UPDATE CMCHAR SET CMLEIG='"+newName+"' WHERE CMLEIG='"+oldName+"'");
 		DB.update("UPDATE CMCHCL SET CMUSERID='"+newName+"' WHERE CMUSERID='"+oldName+"'");
@@ -3030,13 +3041,22 @@ public class MOBloader
 		DB.update("UPDATE CMJRNL SET CMFROM='"+newName+"' WHERE CMFROM='"+oldName+"'");
 		DB.update("UPDATE CMJRNL SET CMTONM='"+newName+"' WHERE CMTONM='"+oldName+"'");
 		DB.update("UPDATE CMPDAT SET CMPLID='"+newName+"' WHERE CMPLID='"+oldName+"'");
+		return true;
 	}
 
-	public void DBDeleteCharOnly(String mobName)
+	/**
+	 * Removes the character row and its clan links.
+	 *
+	 * @param mobName the saved character name
+	 * @return whether the primary character row was removed
+	 */
+	public boolean DBDeleteCharOnly(String mobName)
 	{
 		mobName=DB.injectionClean(mobName);
-		DB.update("DELETE FROM CMCHAR WHERE CMUSERID='"+mobName+"'");
+		if(DB.updateOnce("DELETE FROM CMCHAR WHERE CMUSERID='"+mobName+"'") != 1)
+			return false;
 		DB.update("DELETE FROM CMCHCL WHERE CMUSERID='"+mobName+"'");
+		return true;
 	}
 
 	public void DBUpdateAbilities(final MOB mob)

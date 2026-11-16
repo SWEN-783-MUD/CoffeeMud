@@ -447,19 +447,20 @@ public interface PlayerLibrary extends CMLibrary
 	 * @param deadMOB the player char mob object
 	 * @param deleteAssets true to send retirement msg to the world and kill player data
 	 * @param quiet true to do this silently, false otherwise
+	 * @return whether the character was deleted
 	 */
-	public void obliteratePlayer(MOB deadMOB, boolean deleteAssets, boolean quiet);
+	public boolean obliteratePlayer(MOB deadMOB, boolean deleteAssets, boolean quiet);
 
 	/**
-	 * Renaming a player is quite involved, as there are so many tables and
-	 * objects index by the players names.  Calling this method attempts
-	 * to take care of as much as possible.  To use it, first set the mob
-	 * objects new name, then call this with the old one.
+	 * Changes a saved character's name and updates the live character and references.
+	 * The caller supplies the old and proposed names without changing the MOB first.
 	 *
-	 * @param mob the player char who has been renamed
-	 * @param oldName the previous name
+	 * @param mob the character being renamed
+	 * @param oldName the expected current name
+	 * @param newName the proposed name
+	 * @return whether the rename committed
 	 */
-	public void renamePlayer(MOB mob, String oldName);
+	public boolean renamePlayer(MOB mob, String oldName, String newName);
 
 	/**
 	 * Given a player char mob object, this will ensure that

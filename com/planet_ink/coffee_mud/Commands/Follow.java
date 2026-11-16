@@ -11,6 +11,7 @@ import com.planet_ink.coffee_mud.Common.interfaces.*;
 import com.planet_ink.coffee_mud.Exits.interfaces.*;
 import com.planet_ink.coffee_mud.Items.interfaces.*;
 import com.planet_ink.coffee_mud.Libraries.interfaces.*;
+import com.planet_ink.coffee_mud.Libraries.interfaces.PartyLibrary.FollowResult;
 import com.planet_ink.coffee_mud.Locales.interfaces.*;
 import com.planet_ink.coffee_mud.MOBS.interfaces.*;
 import com.planet_ink.coffee_mud.Races.interfaces.*;
@@ -55,9 +56,10 @@ public class Follow extends StdCommand
 		final Room R=mob.location();
 		if(R==null)
 			return false;
-		if(mob.amFollowing()!=null)
+		final MOB target = mob.amFollowing();
+		if(target!=null)
 		{
-			final CMMsg msg=CMClass.getMsg(mob,mob.amFollowing(),null,CMMsg.MSG_NOFOLLOW,quiet?null:L("<S-NAME> stop(s) following <T-NAMESELF>."));
+			final CMMsg msg=CMClass.getMsg(mob,target,null,CMMsg.MSG_NOFOLLOW,quiet?null:L("<S-NAME> stop(s) following <T-NAMESELF>."));
 			// no room OKaffects, since the damn leader may not be here.
 			if(mob.okMessage(mob,msg))
 				R.send(mob,msg);
@@ -87,6 +89,15 @@ public class Follow extends StdCommand
 		}
 	}
 
+	/**
+	 * Handles a follow attempt from a command or an internal caller. Player
+	 * switches are checked before the old link changes.
+	 *
+	 * @param mob the follower
+	 * @param tofollow the new target, or {@code null} to detach
+	 * @param quiet whether to suppress follow messages
+	 * @return whether the action went ahead
+	 */
 	public boolean processFollow(final MOB mob, final MOB tofollow, final boolean quiet)
 	{
 		if(mob==null)
@@ -96,6 +107,8 @@ public class Follow extends StdCommand
 			return false;
 		if(tofollow!=null)
 		{
+			if(mob.isPlayer() && tofollow.isPlayer())
+				return followPartyMember(mob,tofollow,R,quiet);
 			if(tofollow==mob)
 			{
 				return nofollow(mob,true,false);
@@ -122,6 +135,44 @@ public class Follow extends StdCommand
 		return true;
 	}
 
+	// Keep the current link until the native message rechecks party state and applies the replacement.
+	private boolean followPartyMember(final MOB follower, final MOB target, final Room room, final boolean quiet)
+	{
+		final FollowResult result = CMLib.parties().checkPlayerFollow(follower,target);
+		if(result != FollowResult.ALLOWED)
+		{
+			if(!quiet)
+				follower.tell(L(result.getMessage()));
+			return false;
+		}
+
+		// Keep visibility and any native effects that prevent detaching from the old target.
+		if(!CMLib.flags().canBeSeenBy(target,follower))
+		{
+			if(!quiet)
+				follower.tell(L("I don't see them here."));
+			return false;
+		}
+		final MOB previous = follower.amFollowing();
+		if((previous != null)
+		&& !follower.okMessage(follower,CMClass.getMsg(follower,previous,null,CMMsg.MSG_NOFOLLOW,null)))
+			return false;
+
+		final CMMsg msg = CMClass.getMsg(follower,target,null,CMMsg.MSG_FOLLOW,
+				quiet ? null : L("<S-NAME> follow(s) <T-NAMESELF>."));
+		if(!room.okMessage(follower,msg))
+			return false;
+		if((follower.location() != room) || (target.location() != room))
+		{
+			if(!quiet)
+				follower.tell(L(FollowResult.NOT_HERE.getMessage()));
+			return false;
+		}
+		room.send(follower,msg);
+		return follower.amFollowing() == target;
+	}
+
+	/** {@inheritDoc} */
 	@Override
 	public boolean execute(final MOB mob, final List<String> commands, final int metaFlags)
 		throws java.io.IOException
@@ -148,16 +199,27 @@ public class Follow extends StdCommand
 		}
 
 		final String whomToFollow=CMParms.combine(commands,1);
-		if((whomToFollow.equalsIgnoreCase("self")||whomToFollow.equalsIgnoreCase("me"))
-		   ||(mob.name().toUpperCase().startsWith(whomToFollow)))
+		if(whomToFollow.equalsIgnoreCase("self") || whomToFollow.equalsIgnoreCase("me")
+		|| (!mob.isPlayer() && mob.name().toUpperCase().startsWith(whomToFollow)))
 		{
-			nofollow(mob,true,quiet);
+			if(mob.isPlayer())
+			{
+				if(!quiet)
+					mob.tell(L(FollowResult.SELF.getMessage()));
+			}
+			else
+				nofollow(mob,true,quiet);
 			return false;
 		}
 		final MOB target=R.fetchInhabitant(whomToFollow);
 		if((target==null)||(!CMLib.flags().canBeSeenBy(target,mob)))
 		{
 			CMLib.commands().postCommandFail(mob,origCmds,L("I don't see them here."));
+			return false;
+		}
+		if(mob.isPlayer() && target.isPlayer())
+		{
+			processFollow(mob,target,quiet);
 			return false;
 		}
 		if((target.isMonster())&&(!mob.isMonster()))

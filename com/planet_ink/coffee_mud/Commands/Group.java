@@ -164,6 +164,18 @@ public class Group extends StdCommand
 		return shortCode;
 	}
 
+	private boolean rewiresPlayerLinks(final MOB newLeader, final List<MOB> movers)
+	{
+		for(final MOB member : movers)
+		{
+			final MOB previous = member.amFollowing();
+			if(member.isPlayer() && (newLeader.isPlayer() || ((previous != null) && previous.isPlayer())))
+				return true;
+		}
+		return false;
+	}
+
+	/** {@inheritDoc} */
 	@Override
 	public boolean execute(final MOB mob, final List<String> commands, final int metaFlags)
 		throws java.io.IOException
@@ -198,6 +210,12 @@ public class Group extends StdCommand
 			}
 			if(newLeaderM != null)
 			{
+				// Party leadership and player follow links are changed independently.
+				if(rewiresPlayerLinks(newLeaderM,allFollowers))
+				{
+					mob.tell(L("Use PARTY LEADER to pass party leadership and FOLLOW or UNFOLLOW to change player links."));
+					return false;
+				}
 				if(newLeaderM.isAttributeSet(Attrib.NOFOLLOW))
 				{
 					mob.tell(L("@x1 is not accepting followers.",newLeaderM.name(mob)));
