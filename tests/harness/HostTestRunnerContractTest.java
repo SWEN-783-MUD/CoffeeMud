@@ -19,6 +19,7 @@ public final class HostTestRunnerContractTest
 	private static final class Example extends StdTest
 	{
 		private final Callable<String> action;
+		private String[] groups = {"example"};
 
 		/** Lets the caller wait for cleanup after requesting cancellation. */
 		private final CountDownLatch cleaned = new CountDownLatch(1);
@@ -46,7 +47,7 @@ public final class HostTestRunnerContractTest
 		@Override
 		public String[] getTestGroups()
 		{
-			return new String[] {"example"};
+			return groups;
 		}
 
 		/**
@@ -151,6 +152,22 @@ public final class HostTestRunnerContractTest
 		final List<CMTest> registered = Collections.singletonList(passing);
 		final List<CMTest> selected = HostTestRunner.selectTests(Collections.enumeration(registered), true, "EXAMPLE");
 		check(selected.size() == 1, "Group lookup ignores case.");
+		final Example excluded = new Example(() -> null);
+		excluded.groups = new String[] {"example", "CI_EXCLUDE"};
+		final List<CMTest> mixed = Arrays.asList(excluded, passing);
+		final List<CMTest> filtered = HostTestRunner.selectTests(Collections.enumeration(mixed), true, "example");
+		check(filtered.size() == 1 && filtered.get(0) == passing, "Group selection must omit ci_exclude tests, ignoring case.");
+		check(HostTestRunner.selectTests(Collections.enumeration(Collections.<CMTest>singletonList(excluded)), false, excluded.ID()).get(0) == excluded,
+				"Explicit test selection must allow investigating excluded tests.");
+		try
+		{
+			HostTestRunner.selectTests(Collections.enumeration(Collections.<CMTest>singletonList(excluded)), true, "example");
+			throw new AssertionError("An entirely excluded group must fail rather than pass without tests.");
+		}
+		catch(final IllegalArgumentException expected)
+		{
+			check(expected.getMessage().contains("No tests found"), "Report an empty filtered group clearly.");
+		}
 		try
 		{
 			HostTestRunner.selectTests(Collections.enumeration(registered), true, "missing");
