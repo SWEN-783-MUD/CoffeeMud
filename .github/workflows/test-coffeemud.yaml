@@ -35,6 +35,9 @@ jobs:
           - suite: party
             args: --group party --skip-standalone
             job_timeout: 12
+          - suite: encounter
+            args: --group encounter --skip-standalone
+            job_timeout: 12
           - suite: core
             args: --group exec_core --verify-harness
             job_timeout: 12

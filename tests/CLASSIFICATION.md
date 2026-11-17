@@ -2,7 +2,7 @@
 
 Each concrete registered Java test has one `exec_` group in addition to its existing groups. Existing group membership and test bodies are preserved. `StdTest` and `PropTest` are support classes and remain unclassified.
 
-These labels describe execution requirements. They are not runtime measurements or a guarantee that every group is ready to gate pull requests. The test workflow runs `exec_core`, `exec_integration`, `exec_randomized`, and `exec_stress` as separate jobs, alongside a dedicated `party` feature suite, applying the `ci_exclude` filter. The launcher's default selection remains `party`.
+These labels describe execution requirements. They are not runtime measurements or a guarantee that every group is ready to gate pull requests. The test workflow runs `exec_core`, `exec_integration`, `exec_randomized`, and `exec_stress` as separate jobs, alongside dedicated `party` and `encounter` feature suites, applying the `ci_exclude` filter. The launcher's default selection remains `party`.
 
 | Group | Purpose |
 | --- | --- |
@@ -32,12 +32,13 @@ The host runner filters `ci_exclude` tests from every group selection, ignoring 
 Use the existing exact group selector:
 
 ```text
+python tests/run_tests.py --group encounter --skip-standalone
 python tests/run_tests.py --group exec_core --skip-standalone
 python tests/run_tests.py --group exec_integration --skip-standalone
 python tests/run_tests.py --group exec_stress --skip-standalone --test-timeout 180 --timeout 300
 ```
 
-The dedicated party suite runs all 12 party fixtures, including those also covered by execution categories. This overlap is intentional so new party fixtures remain covered before classification.
+The dedicated party suite runs all 12 party fixtures, including those also covered by execution categories. The dedicated encounter suite runs EncounterLifecycleTest and PartyEncounterTest. This overlap is intentional: each matching fixture runs once per job, so feature suites and execution categories can cover the same fixture.
 
 The same labels work in-game, for example `TEST exec_core` and `TEST LIST exec_core`. The launcher runs standalone party fixtures first unless `--skip-standalone` is supplied.
 
@@ -55,9 +56,9 @@ A label does not change assertion handling, provision missing world data, seed r
 
 `Cmparms`, `MiniJSONTest`, `MiniTSONTest`, `Parseany`, `PartyMembershipTest`, `PartyInvitationTest`, `PartyRequestTest`, `PartySelectorTest`, `Validmisctext`, `XMLManagerTest`.
 
-### `exec_integration` (42)
+### `exec_integration` (43)
 
-`ClockConversion`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `ExplorationContextTest`, `PartyEncounterTest`, `PartyFollowTest`, `PartyIdLimitTest`, `PartyInviteCommandTest`, `PartyLifecycleTest`, `PartyTravelTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
+`ClockConversion`, `EncounterLifecycleTest`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `ExplorationContextTest`, `PartyEncounterTest`, `PartyFollowTest`, `PartyIdLimitTest`, `PartyInviteCommandTest`, `PartyLifecycleTest`, `PartyTravelTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
 
 ### `exec_manual` (18)
 

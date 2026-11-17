@@ -42,7 +42,7 @@ public class PartyEncounterTest extends StdTest
 	@Override
 	public String[] getTestGroups()
 	{
-		return new String[] {"all", "party", "exec_integration"};
+		return new String[] {"all", "party", "encounter", "exec_integration"};
 	}
 
 	/** {@inheritDoc} */
