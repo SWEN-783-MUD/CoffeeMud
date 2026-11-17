@@ -74,3 +74,26 @@ The stress test needs more than the default 30-second per-test deadline. Group r
 `test-coffeemud.yaml` runs a launcher-check job and six independent matrix jobs for party, encounter, core, integration, randomized, and stress checks on pushes to `master`, pull requests, and manual runs. Feature-branch pushes rely on their pull request run, avoiding duplicate push and PR checks; branches without an open PR can be tested manually. All jobs use Windows and Python 3.13; the Java suites use JDK 17. Core also verifies the Java harness contracts and standalone party fixtures. Matrix fail-fast is disabled so a failure in one suite does not cancel the others. Each suite uploads its own logs and XML results even after a failed test step, retained for seven days. This workflow is separate from the existing distribution/release workflow.
 
 To add coverage, write a `StdTest` with a `getTestGroups()` category and add your assertions to `doTest`. Existing tests remain available through `TEST <group>` in-game. Keep socket login, reconnect, and client rendering checks separate from this programmatic test context.
+
+## Encounter command service
+
+Player encounter commands use `EncounterLibrary` through `CMLib.encounters()`.
+`CMEncounters` coordinates access to the current room's manager; the manager and
+`GeneralEncounter` retain lifecycle and turn state. The library does not create a
+second encounter store or maintain an authoritative cross-room enrollment index.
+
+`ENDTURN` is the first command using this path. It parses input, delegates to the
+library, and translates its result into feedback. Resolution is immediate under
+the manager and encounter locks, with no native action cost. It rejects pending,
+paused, out-of-turn, unenrolled, and unable-to-act requests. The actor check uses
+CoffeeMud's existing alive/awake/mobile/unbound checks; encounter-specific
+unconscious state and automatic turn skipping remain future work.
+
+`EncounterCommandTest` runs the registered command in a host with real player
+fixtures. It checks library discovery, room-scoped lookup, argument errors,
+resource preservation on rejection, voluntary turn progression, rescue pause,
+and completion. It belongs to `encounter` and `exec_integration`.
+
+This establishes the shared service entry point. The general action contract,
+ordered queue, originating-turn identity, timeouts, automatic turn notifications,
+and cross-room enrollment tracking remain separate implementation work.
