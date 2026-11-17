@@ -150,7 +150,8 @@ public class CMLib
 		GALACTIC(GalacticMap.class),
 		CITY(CityMap.class),
 		WORLDHUNT(WorldHuntLibrary.class),
-		PARTIES(PartyLibrary.class)
+		PARTIES(PartyLibrary.class),
+		ENCOUNTERS(EncounterLibrary.class)
 		;
 
 		public final Class<?> ancestor;
@@ -858,6 +859,12 @@ public class CMLib
 	public static final PartyLibrary parties()
 	{
 		return (PartyLibrary)l().libraries[Library.PARTIES.ordinal()];
+	}
+
+	/** Returns the encounter command service for this host. */
+	public static final EncounterLibrary encounters()
+	{
+		return (EncounterLibrary)l().libraries[Library.ENCOUNTERS.ordinal()];
 	}
 
 	/**
