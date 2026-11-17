@@ -170,12 +170,22 @@ public final class HostTestRunner
 				continue;
 			}
 
+			boolean excluded = false;
+			for(final String group : test.getTestGroups())
+			{
+				if(group.equalsIgnoreCase("ci_exclude"))
+					excluded = true;
+			}
+
 			// Add each test once even if its group list contains duplicates.
 			for(final String group : test.getTestGroups())
 			{
 				if(group.equalsIgnoreCase(selector))
 				{
-					selected.add(test);
+					if(excluded)
+						System.out.println("CI EXCLUDE " + test.ID() + ": ci_exclude");
+					else
+						selected.add(test);
 					break;
 				}
 			}
