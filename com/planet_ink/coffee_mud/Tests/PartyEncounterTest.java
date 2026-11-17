@@ -209,8 +209,7 @@ public class PartyEncounterTest extends StdTest
 					"Opening setup must not deal damage, spend actions, or start native combat.");
 			check(!manager.startEncounter(opener.getMob(),guard) && manager.getEncounter()==manual,
 					"Duplicate triggers must preserve the registered encounter.");
-			check(manager.activateEncounter(manual) && manager.awaitRescue(manual)
-					&& manager.completeEncounter(manual),"The manual encounter must finish from rescue.");
+			checkManagedTurns(manager,manual);
 			check(present.command("EXPLORE").contains("activity is Normal")
 					&& manual.getParticipants().get(1).getApproach().activity==Activity.AVOID_NOTICE,
 					"Rescue completion must reset live activity while preserving setup snapshots.");
@@ -238,6 +237,36 @@ public class PartyEncounterTest extends StdTest
 		{
 			nativeEnemy.destroy();
 		}
+	}
+
+	private static void checkManagedTurns(final EncounterManager manager, final GeneralEncounter encounter)
+	{
+		final List<EncounterParticipant> members=encounter.getParticipants();
+		final EncounterParticipant first=members.get(0);
+		final EncounterParticipant second=members.get(1);
+		check(encounter.getRound()==0 && encounter.getCurrentParticipant()==null
+				&& first.getActionsRemaining()==0,"Pending party setup must not grant a turn.");
+		check(manager.activateEncounter(encounter) && encounter.getRound()==1
+				&& encounter.getCurrentParticipant()==first && first.getActionsRemaining()==3,
+				"Manager activation must start round one with three actions for the opener.");
+		check(encounter.spendActions(first,1,true,1),"The opener must be able to spend turn resources.");
+		check(manager.awaitRescue(encounter) && encounter.getCurrentParticipant()==null
+				&& !encounter.spendActions(first,1) && !encounter.endTurn(first),
+				"Rescue pause must block resource spending and ordinary turn advancement.");
+		check(manager.resumeEncounter(encounter) && encounter.getCurrentParticipant()==first
+				&& first.getActionsRemaining()==2 && first.getAttackCount()==1 && first.getDiagonalCount()==1,
+				"Resuming must preserve the current turn's resources and usage.");
+		check(encounter.spendActions(first,2) && encounter.getCurrentParticipant()==second
+				&& first.getActionsRemaining()==0 && second.getActionsRemaining()==3,
+				"Exhausting the opener's actions must begin the enrolled teammate's turn once.");
+		check(encounter.endTurn(second) && encounter.endTurn(members.get(2))
+				&& encounter.getRound()==2 && encounter.getCurrentParticipant()==first
+				&& first.getActionsRemaining()==3 && first.getAttackCount()==0 && first.getDiagonalCount()==0,
+				"Completing the supplied order must start round two with fresh turn resources.");
+		check(manager.awaitRescue(encounter) && manager.completeEncounter(encounter)
+				&& manager.getEncounter()==null && encounter.getCurrentParticipant()==null
+				&& first.getActionsRemaining()==0 && second.getActionsRemaining()==0,
+				"Manager completion from rescue must discard turn actions and release the room.");
 	}
 
 	private static void checkInitialMembers(final GeneralEncounter encounter, final TestPlayer opener,

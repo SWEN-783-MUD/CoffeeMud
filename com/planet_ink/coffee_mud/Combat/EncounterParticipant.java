@@ -7,7 +7,9 @@ import com.planet_ink.coffee_mud.core.party.ExplorationContext;
 
 /**
  * Represents a player or NPC participating in an encounter.
- * Holds the resources and usage counts for that participant's current turn.
+ * Holds the saved exploration approach and resources for the current turn.
+ * Resource mutation methods are public for CoffeeMud's separate class loaders.
+ * Callers should use GeneralEncounter to validate and spend turn resources.
  */
 public class EncounterParticipant
 {
@@ -80,20 +82,22 @@ public class EncounterParticipant
 		return diagonalCount;
 	}
 
-	/** Only the encounter begins turns and changes action resources. */
-	synchronized void beginTurn()
+	/** Called by the encounter when this participant's turn begins. */
+	public synchronized void beginTurn()
 	{
 		actionsRemaining=3;
 		attackCount=0;
 		diagonalCount=0;
 	}
 
-	synchronized void endTurn()
+	/** Called by the encounter to discard unused turn actions. */
+	public synchronized void endTurn()
 	{
 		actionsRemaining=0;
 	}
 
-	synchronized void spendActions(final int cost, final boolean attack, final int diagonalSteps)
+	/** Called by the encounter after validating the activity's resource request. */
+	public synchronized void spendActions(final int cost, final boolean attack, final int diagonalSteps)
 	{
 		actionsRemaining-=cost;
 		if(attack)

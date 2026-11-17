@@ -38,7 +38,7 @@ python tests/run_tests.py --group exec_integration --skip-standalone
 python tests/run_tests.py --group exec_stress --skip-standalone --test-timeout 180 --timeout 300
 ```
 
-The dedicated party suite runs all 12 party fixtures, including those also covered by execution categories. The dedicated encounter suite runs EncounterLifecycleTest and PartyEncounterTest. This overlap is intentional: each matching fixture runs once per job, so feature suites and execution categories can cover the same fixture.
+The dedicated party suite runs all 12 party fixtures, including those also covered by execution categories. The dedicated encounter suite runs EncounterLifecycleTest, EncounterTurnTest, and PartyEncounterTest. This overlap is intentional: each matching fixture runs once per job, so feature suites and execution categories can cover the same fixture.
 
 The same labels work in-game, for example `TEST exec_core` and `TEST LIST exec_core`. The launcher runs standalone party fixtures first unless `--skip-standalone` is supplied.
 
@@ -56,9 +56,9 @@ A label does not change assertion handling, provision missing world data, seed r
 
 `Cmparms`, `MiniJSONTest`, `MiniTSONTest`, `Parseany`, `PartyMembershipTest`, `PartyInvitationTest`, `PartyRequestTest`, `PartySelectorTest`, `Validmisctext`, `XMLManagerTest`.
 
-### `exec_integration` (43)
+### `exec_integration` (44)
 
-`ClockConversion`, `EncounterLifecycleTest`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `ExplorationContextTest`, `PartyEncounterTest`, `PartyFollowTest`, `PartyIdLimitTest`, `PartyInviteCommandTest`, `PartyLifecycleTest`, `PartyTravelTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
+`ClockConversion`, `EncounterLifecycleTest`, `EncounterTurnTest`, `FormationTest`, `LongSet`, `MonkeyGrip`, `PartyCommandTest`, `ExplorationContextTest`, `PartyEncounterTest`, `PartyFollowTest`, `PartyIdLimitTest`, `PartyInviteCommandTest`, `PartyLifecycleTest`, `PartyTravelTest`, `PropFightspellcast`, `PropHaveadjuster`, `PropHaveenabler`, `PropHaveresister`, `PropHavespellcast`, `PropHavezapper`, `PropHereadjuster`, `PropHerespellcast`, `PropHidden`, `PropReqalignments`, `PropReqcapacity`, `PropResistance`, `PropRideadjuster`, `PropRideenabler`, `PropRideresister`, `PropRidespellcast`, `PropRidezapper`, `PropSpelladder`, `PropUsespellcast`, `PropUsespellcast2`, `PropWearadjuster`, `PropWearenabler`, `PropWearresister`, `PropWearspellcast`, `PropWearzapper`, `Spaceangles`, `Spacecollisions`, `Spaceturns`, `Wearing`, `ZapperAnyclasslevel`.
 
 ### `exec_manual` (18)
 
