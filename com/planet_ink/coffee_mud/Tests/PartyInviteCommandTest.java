@@ -352,7 +352,7 @@ public class PartyInviteCommandTest extends StdTest
 	/** Supplies a real player object with a session that captures command output. */
 	static final class TestPlayer implements AutoCloseable
 	{
-		private final MOB mob = CMClass.getMOB("StdMOB");
+		private final MOB mob;
 
 		private final RecordingSession session = new RecordingSession();
 
@@ -364,6 +364,13 @@ public class PartyInviteCommandTest extends StdTest
 		 */
 		TestPlayer(final String name, final Room room)
 		{
+			this(name,room,CMClass.getMOB("StdMOB"));
+		}
+
+		/** Creates a player with a supplied MOB for controlled character-state checks. */
+		TestPlayer(final String name, final Room room, final MOB character)
+		{
+			mob=character;
 			mob.setName(name);
 			mob.setPlayerStats((PlayerStats)CMClass.getCommon("DefaultPlayerStats"));
 			mob.baseCharStats().setMyRace(CMClass.getRace("Human"));
