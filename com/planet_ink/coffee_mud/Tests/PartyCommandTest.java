@@ -33,7 +33,7 @@ public class PartyCommandTest extends StdTest
 	@Override
 	public String[] getTestGroups()
 	{
-		return new String[] {"all", "party"};
+		return new String[] {"all", "party", "exec_integration"};
 	}
 
 	@Override

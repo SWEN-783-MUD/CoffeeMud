@@ -27,7 +27,7 @@ public class PartySelectorTest extends StdTest
 	@Override
 	public String[] getTestGroups()
 	{
-		return new String[] {"all", "party"};
+		return new String[] {"all", "party", "exec_core"};
 	}
 
 	/** {@inheritDoc} */

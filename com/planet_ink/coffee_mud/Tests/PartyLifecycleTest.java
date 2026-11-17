@@ -38,7 +38,7 @@ public class PartyLifecycleTest extends StdTest
 	@Override
 	public String[] getTestGroups()
 	{
-		return new String[] {"party"};
+		return new String[] {"party", "exec_integration"};
 	}
 
 	/** {@inheritDoc} */
