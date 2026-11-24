@@ -1,6 +1,8 @@
 package com.planet_ink.coffee_mud.Commands;
 
 import java.util.List;
+import com.planet_ink.coffee_mud.Combat.ActionOutcome;
+import com.planet_ink.coffee_mud.Combat.EndTurnAction;
 import com.planet_ink.coffee_mud.Libraries.interfaces.EncounterLibrary;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 import com.planet_ink.coffee_mud.core.CMLib;
@@ -24,9 +26,10 @@ public class EndTurn extends StdCommand
 			mob.tell(L("Usage: ENDTURN"));
 			return false;
 		}
-		switch(encounters().endTurn(mob))
+		final ActionOutcome outcome=encounters().submit(mob,new EndTurnAction());
+		switch(outcome.getValidation().getCode())
 		{
-		case ENDED: mob.tell(L("You ended your turn.")); break;
+		case VALID: mob.tell(L("You ended your turn.")); break;
 		case NOT_PLAYER: mob.tell(L("Only player characters can use ENDTURN.")); break;
 		case NO_ENCOUNTER: mob.tell(L("You are not in an encounter here.")); break;
 		case NOT_PARTICIPANT: mob.tell(L("You are not participating in this encounter.")); break;
@@ -35,6 +38,7 @@ public class EndTurn extends StdCommand
 		case COMPLETED: mob.tell(L("This encounter has already ended.")); break;
 		case NOT_YOUR_TURN: mob.tell(L("Wait for your turn.")); break;
 		case UNABLE_TO_ACT: mob.tell(L("You cannot act right now.")); break;
+		default: mob.tell(outcome.getValidation().getReason()); break;
 		}
 		return false;
 	}

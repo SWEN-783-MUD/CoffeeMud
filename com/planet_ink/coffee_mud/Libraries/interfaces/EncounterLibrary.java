@@ -1,6 +1,8 @@
 package com.planet_ink.coffee_mud.Libraries.interfaces;
 
 import com.planet_ink.coffee_mud.Combat.GeneralEncounter;
+import com.planet_ink.coffee_mud.Combat.EncounterAction;
+import com.planet_ink.coffee_mud.Combat.ActionOutcome;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
 
 /** Shared entry point for player commands interacting with room encounters. */
@@ -10,7 +12,8 @@ public interface EncounterLibrary extends CMLibrary
 	public enum EndTurnResult
 	{
 		ENDED, NOT_PLAYER, NO_ENCOUNTER, NOT_PARTICIPANT,
-		PENDING, PAUSED, COMPLETED, NOT_YOUR_TURN, UNABLE_TO_ACT
+		PENDING, PAUSED, COMPLETED, NOT_YOUR_TURN, UNABLE_TO_ACT,
+		RESOLUTION_IN_PROGRESS
 	}
 
 	/**
@@ -22,8 +25,17 @@ public interface EncounterLibrary extends CMLibrary
 	public GeneralEncounter getEncounter(MOB actor);
 
 	/**
-	 * Validates and immediately ends the player's active turn under the room
-	 * manager and encounter locks. No request is queued or retained for replay.
+	 * Resolves an immediate player action under the room and encounter locks.
+	 * Common and action-specific prerequisites are checked before execution.
+	 * No request is queued or retained for replay.
+	 * @param actor the player submitting the action
+	 * @param action the action and its parameters
+	 * @return the resolution outcome or a rejection with its reason
+	 */
+	public ActionOutcome submit(MOB actor, EncounterAction action);
+
+	/**
+	 * Convenience entry point submitting EndTurnAction through the shared resolver.
 	 * @param actor the player requesting to end their turn
 	 * @return the result, for the command to translate into player feedback
 	 */

@@ -31,6 +31,7 @@ public class GeneralEncounter implements Encounter
 	private volatile State state=State.PENDING;
 	private int round=0;
 	private int currentParticipantIndex=-1;
+	private boolean resolvingAction;
 
 	/**
 	 * Creates a pending encounter with a snapshot of the initial participants.
@@ -119,13 +120,41 @@ public class GeneralEncounter implements Encounter
 	public synchronized boolean spendActions(final EncounterParticipant participant, final int cost,
 			final boolean attack, final int diagonalSteps)
 	{
-		if((state!=State.ACTIVE)||(participant==null)||(participant!=getCurrentParticipant())
-		||(cost<=0)||(diagonalSteps<0)||(cost>participant.getActionsRemaining()))
+		if((cost<=0)||!consumeActions(participant,cost,attack,diagonalSteps))
 			return false;
-		participant.spendActions(cost,attack,diagonalSteps);
 		if(participant.getActionsRemaining()==0)
 			endTurn(participant);
 		return true;
+	}
+
+	/**
+	 * Resolver resource debit, including free actions, without turn advancement.
+	 * Public for CoffeeMud's separate class loaders; ordinary callers use the
+	 * encounter library so validation and action follow-up cannot be bypassed.
+	 */
+	public synchronized boolean consumeActions(final EncounterParticipant participant, final int cost,
+			final boolean attack, final int diagonalSteps)
+	{
+		if((state!=State.ACTIVE)||(participant==null)||(participant!=getCurrentParticipant())
+		||(cost<0)||(diagonalSteps<0)||(cost>participant.getActionsRemaining()))
+			return false;
+		participant.spendActions(cost,attack,diagonalSteps);
+		return true;
+	}
+
+	/** Resolver-only guard against nested resolution through message callbacks. */
+	public synchronized boolean beginActionResolution()
+	{
+		if(resolvingAction)
+			return false;
+		resolvingAction=true;
+		return true;
+	}
+
+	/** Releases the resolver guard even if an action callback throws. */
+	public synchronized void finishActionResolution()
+	{
+		resolvingAction=false;
 	}
 
 	/**
