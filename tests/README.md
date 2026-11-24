@@ -82,18 +82,50 @@ Player encounter commands use `EncounterLibrary` through `CMLib.encounters()`.
 `GeneralEncounter` retain lifecycle and turn state. The library does not create a
 second encounter store or maintain an authoritative cross-room enrollment index.
 
-`ENDTURN` is the first command using this path. It parses input, delegates to the
-library, and translates its result into feedback. Resolution is immediate under
-the manager and encounter locks, with no native action cost. It rejects pending,
-paused, out-of-turn, unenrolled, and unable-to-act requests. The actor check uses
-CoffeeMud's existing alive/awake/mobile/unbound checks; encounter-specific
-unconscious state and automatic turn skipping remain future work.
+`ENDTURN` submits an `EndTurnAction` through that library. The library creates an
+`ActionRequest` identifying the encounter, participant, and action. `ActionResolver`
+runs the shared lifecycle immediately under the manager and encounter locks:
+
+1. **pre_use:** validate enrollment, encounter state, turn ownership, ability to
+   act, and available actions, followed by the action's own `validate` method.
+2. **execute:** apply validated effects and consume the reported resources once.
+3. **post_use:** run the action's optional follow-up, then end or advance the turn
+   if requested or if its action budget is exhausted.
+
+`ValidationResult` provides a typed failure code and explanation. `ActionOutcome`
+reports execution success, attack/diagonal usage, and an explicit turn-end request.
+End Turn costs zero actions; shared follow-up discards the unused budget and
+advances. Existing native command costs and player feedback are preserved.
+
+Actions must not mutate turn ownership or spend resources themselves. Failed
+validation has no effects. An execution rejection must also leave state unchanged.
+Unexpected callback exceptions propagate; there is no automatic rollback of
+already-applied effects. The resolver guard is released even after an exception.
+If follow-up fails after costs were committed, an exhausted or explicitly ended
+turn is still finalized; the same request cannot replay the committed effects.
+
+Each request can be processed once, including rejected requests. Resolution is
+serialized, and nested action submissions during callbacks are rejected. This is
+not an ordered queue: no requests are retained, and a request does not capture its
+originating turn for later execution. Do not store requests for delayed replay.
+The player-facing library rejects NPC commands; the same resolver can serve
+enrolled NPCs through a future manager-owned NPC entry point.
+
+The actor check uses CoffeeMud's existing alive/awake/mobile/unbound checks;
+encounter-specific unconscious state and automatic turn skipping remain future
+work. Only End Turn has a production action implementation. Missing grid, preset,
+or combat-math integrations must be reported by action validation before effects
+or resource consumption, rather than returning simulated success.
 
 `EncounterCommandTest` runs the registered command in a host with real player
 fixtures. It checks library discovery, room-scoped lookup, argument errors,
 resource preservation on rejection, voluntary turn progression, rescue pause,
 and completion. It belongs to `encounter` and `exec_integration`.
 
-This establishes the shared service entry point. The general action contract,
-ordered queue, originating-turn identity, timeouts, automatic turn notifications,
-and cross-room enrollment tracking remain separate implementation work.
+`EncounterActionTest` exercises shared prerequisite rejection, lifecycle ordering,
+zero-cost actions, exhausted budgets, completion during follow-up, request replay,
+nested callbacks, exception propagation, and concurrent spending. It also belongs
+to `encounter` and `exec_integration`.
+
+The ordered queue, originating-turn identity, timeouts, automatic turn notifications,
+other combat actions, and cross-room enrollment tracking remain separate work.
