@@ -108,10 +108,42 @@ public class EncounterManager
 
 			final List<EncounterParticipant> participants = new ArrayList<EncounterParticipant>();
 			participants.add(new EncounterParticipant(player,parties.explorationContext(player)));
+			addPresentPartyMembers(participants,player,parties,Collections.<MOB>emptySet());
 			participants.add(new EncounterParticipant(target));
 			encounter = new GeneralEncounter(participants);
+			stopNativeCombat(participants);
 			return true;
 		});
+	}
+
+	// Called under the manager and party character locks. Preserve roster order and
+	// the snapshots of any arrivals already enrolled. A rejected arrival must not
+	// be admitted through the present-member lookup instead.
+	private void addPresentPartyMembers(final List<EncounterParticipant> participants,
+			final MOB opener, final PartyLibrary parties, final Set<MOB> rejectedArrivals)
+	{
+		final Set<MOB> enrolled = new LinkedHashSet<MOB>();
+		for(final EncounterParticipant participant : participants)
+			enrolled.add(participant.getMob());
+		for(final MOB member : parties.onlinePartyMembers(opener))
+		{
+			if((member.location() == room) && room.isInhabitant(member) && !member.amDead()
+			&& !member.amDestroyed() && !rejectedArrivals.contains(member) && enrolled.add(member))
+				participants.add(new EncounterParticipant(member,parties.explorationContext(member)));
+		}
+	}
+
+	// Do not recursively stop followers who are outside this encounter.
+	private void stopNativeCombat(final List<EncounterParticipant> participants)
+	{
+		for(final EncounterParticipant participant : participants)
+		{
+			final MOB player = participant.getMob();
+			final MOB opponent = player.getVictim();
+			player.setVictim(null);
+			if((opponent != null) && (opponent.getVictim() == player))
+				opponent.setVictim(null);
+		}
 	}
 
 	/**
@@ -156,16 +188,21 @@ public class EncounterManager
 				if(!canOpen(opener,target) || !parties.isCurrentArrival(openingArrival))
 					return false;
 
-				// Enroll only players who arrived in this move and are still here.
+				// Keep accepted arrival snapshots, then include teammates already here.
 				final List<EncounterParticipant> participants = new ArrayList<EncounterParticipant>();
+				final Set<MOB> rejectedArrivals = new LinkedHashSet<MOB>();
 				for(final Arrival arrival : batch.arrivals)
 				{
 					final MOB player = arrival.player;
-					if(parties.isCurrentArrival(arrival) && !player.amDead() && !player.isInCombat())
+					if(parties.isCurrentArrival(arrival) && !player.amDead())
 						participants.add(new EncounterParticipant(player,arrival.exploration));
+					else
+						rejectedArrivals.add(player);
 				}
+				addPresentPartyMembers(participants,opener,parties,rejectedArrivals);
 				participants.add(new EncounterParticipant(target));
 				encounter = new GeneralEncounter(participants);
+				stopNativeCombat(participants);
 				return true;
 			});
 		}
@@ -228,19 +265,43 @@ public class EncounterManager
 	}
 
 	/**
-	 * Closes this room's active encounter and resets its participants' activities.
+	 * Pauses this room's active encounter. Rescue eligibility and deadlines are
+	 * supplied by the encounter policy; this transition does not admit a rescuer.
+	 * @param current the encounter awaiting rescue
+	 * @return whether the room paused it
+	 */
+	public synchronized boolean awaitRescue(final GeneralEncounter current)
+	{
+		return (current != null) && (encounter == current) && current.awaitRescue();
+	}
+
+	/**
+	 * Resumes this room's encounter after its owner has accepted a rescue.
+	 * @param current the encounter to resume
+	 * @return whether the room resumed it
+	 */
+	public synchronized boolean resumeEncounter(final GeneralEncounter current)
+	{
+		return (current != null) && (encounter == current) && current.resume();
+	}
+
+	/**
+	 * Closes this room's active or awaiting-rescue encounter and resets its
+	 * participants' activities.
 	 *
 	 * @param current the encounter that has finished
 	 * @return whether the room completed it
 	 */
 	public synchronized boolean completeEncounter(final GeneralEncounter current)
 	{
-		if((current == null) || (encounter != current) || (current.getState() != GeneralEncounter.State.ACTIVE))
+		if((current == null) || (encounter != current)
+		|| ((current.getState() != GeneralEncounter.State.ACTIVE)
+			&& (current.getState() != GeneralEncounter.State.AWAITING_RESCUE)))
 			return false;
 
 		final PartyLibrary parties = CMLib.parties();
 		return parties.commitEncounterChange(() -> {
-			// Keep the active phase visible until all participant resets have finished.
+			// Keep enrollment restrictions visible until all participant resets have finished.
 			for(final EncounterParticipant participant : current.getParticipants())
 				parties.resetExplorationActivity(participant.getMob());
 			current.complete();

@@ -7,12 +7,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.planet_ink.coffee_mud.MOBS.StdMOB;
 
 import com.planet_ink.coffee_mud.Areas.interfaces.Area;
 import com.planet_ink.coffee_mud.Combat.EncounterManager;
 import com.planet_ink.coffee_mud.Combat.GeneralEncounter;
 import com.planet_ink.coffee_mud.Common.interfaces.CMMsg;
 import com.planet_ink.coffee_mud.Common.interfaces.Session;
+import com.planet_ink.coffee_mud.Common.interfaces.PhyStats;
+import com.planet_ink.coffee_mud.Combat.EncounterParticipant;
 import com.planet_ink.coffee_mud.Locales.StdRoom;
 import com.planet_ink.coffee_mud.Locales.interfaces.Room;
 import com.planet_ink.coffee_mud.MOBS.interfaces.MOB;
@@ -38,7 +42,7 @@ public class PartyEncounterTest extends StdTest
 	@Override
 	public String[] getTestGroups()
 	{
-		return new String[] {"all", "party"};
+		return new String[] {"all", "party", "encounter", "exec_integration"};
 	}
 
 	/** {@inheritDoc} */
@@ -143,10 +147,15 @@ public class PartyEncounterTest extends StdTest
 				check(room.okMessage(guard,nativeAttack),"Native attack permission should return after the encounter ends.");
 				check(alice.command("KILL","Guard").contains("is pending"),"The team's KILL trigger should still open an encounter.");
 				final GeneralEncounter manual = (GeneralEncounter)manager.getEncounter();
-				check(manual.getParticipants().size() == 2 && manual.getParticipants().get(0).getMob() == alice.getMob()
+				check(manual.getParticipants().size() == 3 && manual.getParticipants().get(0).getMob() == alice.getMob()
 						&& manual.getParticipants().get(0).getApproach().entrySide == Directions.WEST,
-						"Manual initiation should record the opener's approach.");
-				check(manager.activateEncounter(manual) && manager.completeEncounter(manual),"The manual encounter should close.");
+						"Manual initiation should record the opener's approach and include Bob already in the room.");
+				check(manager.activateEncounter(manual) && manager.awaitRescue(manual),"The manual encounter should pause.");
+				check(manager.restricts(alice.getMob()) && manager.restricts(bob.getMob()),
+						"Rescue must preserve enrollment restrictions.");
+				check(manager.completeEncounter(manual) && manager.getEncounter() == null,
+						"Completing from rescue must release the room and reset participants.");
+				checkPresentMembers(hall,room,guard);
 			}
 			return null;
 		}
@@ -162,6 +171,114 @@ public class PartyEncounterTest extends StdTest
 			hall.destroy();
 			area.destroy();
 		}
+	}
+
+	private static void checkPresentMembers(final Room hall, final EntryRoom room, final MOB guard)
+	{
+		final String suffix=UUID.randomUUID().toString().substring(0,8);
+		final EncounterManager manager=room.getEncounterManager();
+		final MOB nativeEnemy=CMClass.getMOB("StdMOB");
+		room.bringMobHere(nativeEnemy,false);
+		final AtomicBoolean deadState=new AtomicBoolean(false);
+		final MOB deadCharacter=new StdMOB()
+		{
+			@Override
+			public boolean amDead() { return deadState.get() || super.amDead(); }
+		};
+		try(TestPlayer opener=new TestPlayer("Opener"+suffix,room);
+			TestPlayer present=new TestPlayer("Present"+suffix,room);
+			TestPlayer outside=new TestPlayer("Outside"+suffix,hall);
+			TestPlayer stranger=new TestPlayer("Stranger"+suffix,room);
+			TestPlayer dead=new TestPlayer("Dead"+suffix,room,deadCharacter))
+		{
+			opener.command("PARTY","CREATE");
+			join(opener,present,invite(opener,present));
+			join(opener,outside,invite(opener,outside));
+			join(opener,dead,invite(opener,dead));
+			present.command("EXPLORE","AVOID","NOTICE");
+			deadState.set(true);
+			present.getMob().basePhyStats().setDisposition(PhyStats.IS_SLEEPING);
+			present.getMob().recoverPhyStats();
+			final int guardHP=guard.curState().getHitPoints();
+			final double openingActions=opener.getMob().actions();
+			check(opener.command("KILL","Guard").contains("is pending"),"An opening attack must start pending setup.");
+			final GeneralEncounter manual=(GeneralEncounter)manager.getEncounter();
+			checkInitialMembers(manual,opener,present,guard);
+			check(guard.curState().getHitPoints()==guardHP && opener.getMob().actions()==openingActions
+					&& !guard.isInCombat() && !opener.getMob().isInCombat(),
+					"Opening setup must not deal damage, spend actions, or start native combat.");
+			check(!manager.startEncounter(opener.getMob(),guard) && manager.getEncounter()==manual,
+					"Duplicate triggers must preserve the registered encounter.");
+			checkManagedTurns(manager,manual);
+			check(present.command("EXPLORE").contains("activity is Normal")
+					&& manual.getParticipants().get(1).getApproach().activity==Activity.AVOID_NOTICE,
+					"Rescue completion must reset live activity while preserving setup snapshots.");
+
+			present.getMob().basePhyStats().setDisposition(0);
+			present.getMob().recoverPhyStats();
+			hall.bringMobHere(opener.getMob(),false);
+			manager.setEntryTrigger(batch -> null);
+			opener.command("EAST");
+			check(manager.getEncounter()==null,"A detection rule reporting no hostility must preserve exploration.");
+			opener.command("WEST");
+			present.command("EXPLORE","AVOID","NOTICE");
+			present.getMob().setVictim(nativeEnemy);
+			nativeEnemy.setVictim(present.getMob());
+			check(present.getMob().isInCombat(),"The teammate must begin in native combat.");
+			manager.setEntryTrigger(batch -> guard);
+			opener.command("EAST");
+			final GeneralEncounter entry=(GeneralEncounter)manager.getEncounter();
+			checkInitialMembers(entry,opener,present,guard);
+			check(!present.getMob().isInCombat() && !nativeEnemy.isInCombat(),
+					"Enrolling a teammate must stop their reciprocal native fight.");
+			check(manager.activateEncounter(entry) && manager.completeEncounter(entry),"Entry setup must finish normally.");
+		}
+		finally
+		{
+			nativeEnemy.destroy();
+		}
+	}
+
+	private static void checkManagedTurns(final EncounterManager manager, final GeneralEncounter encounter)
+	{
+		final List<EncounterParticipant> members=encounter.getParticipants();
+		final EncounterParticipant first=members.get(0);
+		final EncounterParticipant second=members.get(1);
+		check(encounter.getRound()==0 && encounter.getCurrentParticipant()==null
+				&& first.getActionsRemaining()==0,"Pending party setup must not grant a turn.");
+		check(manager.activateEncounter(encounter) && encounter.getRound()==1
+				&& encounter.getCurrentParticipant()==first && first.getActionsRemaining()==3,
+				"Manager activation must start round one with three actions for the opener.");
+		check(encounter.spendActions(first,1,true,1),"The opener must be able to spend turn resources.");
+		check(manager.awaitRescue(encounter) && encounter.getCurrentParticipant()==null
+				&& !encounter.spendActions(first,1) && !encounter.endTurn(first),
+				"Rescue pause must block resource spending and ordinary turn advancement.");
+		check(manager.resumeEncounter(encounter) && encounter.getCurrentParticipant()==first
+				&& first.getActionsRemaining()==2 && first.getAttackCount()==1 && first.getDiagonalCount()==1,
+				"Resuming must preserve the current turn's resources and usage.");
+		check(encounter.spendActions(first,2) && encounter.getCurrentParticipant()==second
+				&& first.getActionsRemaining()==0 && second.getActionsRemaining()==3,
+				"Exhausting the opener's actions must begin the enrolled teammate's turn once.");
+		check(encounter.endTurn(second) && encounter.endTurn(members.get(2))
+				&& encounter.getRound()==2 && encounter.getCurrentParticipant()==first
+				&& first.getActionsRemaining()==3 && first.getAttackCount()==0 && first.getDiagonalCount()==0,
+				"Completing the supplied order must start round two with fresh turn resources.");
+		check(manager.awaitRescue(encounter) && manager.completeEncounter(encounter)
+				&& manager.getEncounter()==null && encounter.getCurrentParticipant()==null
+				&& first.getActionsRemaining()==0 && second.getActionsRemaining()==0,
+				"Manager completion from rescue must discard turn actions and release the room.");
+	}
+
+	private static void checkInitialMembers(final GeneralEncounter encounter, final TestPlayer opener,
+			final TestPlayer present, final MOB guard)
+	{
+		check(encounter!=null && encounter.getState()==GeneralEncounter.State.PENDING
+				&& encounter.getParticipants().size()==3,"Only the opener, living present teammate, and guard belong in setup.");
+		final List<EncounterParticipant> members=encounter.getParticipants();
+		check(members.get(0).getMob()==opener.getMob() && members.get(1).getMob()==present.getMob()
+				&& members.get(2).getMob()==guard,"Present teammates must be included once, before the hostile target.");
+		check(members.get(1).getApproach().activity==Activity.AVOID_NOTICE,
+				"A teammate already in the room must retain their individual exploration activity.");
 	}
 
 	private static void checkRoomPermission(final TestPlayer player, final EntryRoom room, final MOB guard)
